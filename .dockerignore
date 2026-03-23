@@ -1,0 +1,25 @@
+# Python virtual environment (rebuilt in container via uv sync)
+.venv/
+**/.venv/
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+**/.git/
+
+# Build artifacts at root (not copied into final image)
+docker-compose.yml
+.dockerignore
+README.md

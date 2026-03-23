@@ -1,0 +1,12 @@
+{
+  "installMethod": "native",
+  "autoUpdates": true,
+  "opusProMigrationComplete": true,
+  "sonnet1m45MigrationComplete": true,
+  "autoUpdatesProtectedForNative": true,
+  "projects": {
+    "/agent": {
+      "hasTrustDialogAccepted": true
+    }
+  }
+}

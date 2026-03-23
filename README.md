@@ -1,2 +1,157 @@
-# mewclaw
+# MewClaw
+
 MewClaw is a lightweight alternative to OpenClaw that runs in containers for security. Has long-term memory, scheduled jobs, credentials store, interactive Web UI Portal. Connects to Telegram, Gmail and other messaging apps. It's powered by Anthropic's Agents SDK (require Claude Code Subscription) and can self-evolve to serve you better.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│  Agent Container (always running)       │
+│                                         │
+│  PID 1: bootstrap.sh (process manager)  │
+│    ├── Caddy (port 8080, gateway)       │
+│    └── Streamlit (port 8081, /app/)     │
+│                                         │
+│  Heartbeat (docker exec, ephemeral):    │
+│    - Claude Code CLI in YOLO mode       │
+│    - Reads memory → works → writes state│
+│    - Exits after each cycle             │
+│                                         │
+│  Filesystem (persists across cycles):   │
+│    /agent/ — memory, web, workspace     │
+└─────────────────────────────────────────┘
+         ▲                    ▲
+         │ docker exec        │ docker commit
+         │ (every 5 min)      │ (every 4 hrs)
+    ┌────┴────────────────────┴────┐
+    │  orchestrator.sh (on host)   │
+    └──────────────────────────────┘
+```
+
+## Quick Start
+
+### 1. Build the seed image
+
+```bash
+docker build -t myagent:seed .
+```
+
+### 2. First run — start the container
+
+```bash
+docker run -d --name myagent -p 8080:8080 myagent:seed
+```
+
+The container starts and waits for authentication. Check the logs:
+
+```bash
+docker logs -f myagent
+```
+
+Alternatively can mount the existing credential file to skip Claude authentication on first run:
+
+```bash
+docker run -d --name myagent -p 8080:8080 -v ~/.claude/credentials.json:/home/agent/.claude/credentials.json myagent:seed
+```
+
+### 3. Authenticate Claude Code
+
+In a **second terminal**, open the Claude CLI interactively:
+
+```bash
+docker exec -it myagent claude
+```
+
+Complete the authentication flow inside the CLI, then exit (`/exit`).
+The bootstrap detects the auth automatically and finishes setup —
+no restart needed.
+
+> **Ports:** 8080 (Caddy gateway), 8081 (Streamlit at /app/).
+> 8082-8090 are available for additional services the agent may create.
+
+### 4. Commit the authenticated state
+
+```bash
+docker commit myagent myagent:authenticated
+```
+
+### 5. Open the web portal
+
+Visit **<http://localhost:8080/>** and follow instructions to bootstrap the agent.
+
+### 6. Start automatic heartbeats
+
+```bash
+chmod +x orchestrator.sh
+./orchestrator.sh
+```
+
+## Orchestrator Options
+
+```bash
+./orchestrator.sh                          # defaults: 5min heartbeat, 4hr snapshot
+./orchestrator.sh --interval 60            # heartbeat every 60 seconds
+./orchestrator.sh --snapshot-interval 7200 # snapshot every 2 hours
+./orchestrator.sh --snapshot               # manual snapshot now
+```
+
+## Rollback
+
+If an evolution goes wrong:
+
+```bash
+# List available snapshots
+docker images myagent
+
+# Roll back
+docker stop myagent
+docker rm myagent
+docker run -d --name myagent -p 8080:8080 myagent:<tag-to-restore>
+```
+
+## Communicating with the Agent
+
+### Via Web Portal (<http://localhost:8080/app/>)
+
+Use the command center to send goals, abort tasks, or give feedback.
+
+### Via CLI
+
+```bash
+# Send a goal
+docker exec myagent bash -c 'echo "[{\"type\":\"goal\",\"content\":\"Build a calculator app\",\"timestamp\":\"$(date -Is)\"}]" > /agent/messages/inbox.json'
+
+# Read agent status
+docker exec myagent cat /agent/memory/state.json | jq .
+
+# Read journal
+docker exec myagent cat /agent/memory/journal.json
+```
+
+## File Structure
+
+```
+ai-agent/
+├── Dockerfile          # Seed image definition
+├── bootstrap.sh        # First-run setup & entrypoint
+├── heartbeat.sh        # Single cycle runner (called via docker exec)
+├── Caddyfile           # Caddy gateway configuration
+├── server.py           # Streamlit web portal (managed by bootstrap.sh)
+├── constitution.md     # Immutable rules (read-only inside container)
+├── orchestrator.sh     # Host-side heartbeat loop & snapshot manager
+├── README.md
+└── prompts/
+    ├── bootstrap.md    # First cycle: build the web portal
+    ├── self-heal.md    # Portal broken: diagnose & fix
+    ├── goal.md         # User assigned a task
+    └── evolve.md       # No task: self-improve
+```
+
+## How Prompt Selection Works
+
+Each heartbeat, the agent selects its prompt based on priority:
+
+1. **No state.json exists** → `bootstrap.md` (build portal from scratch)
+2. **Portal health check fails** → `self-heal.md` (fix portal first)
+3. **Commands in inbox.json** → `goal.md` (process user commands)
+4. **Everything healthy, no tasks** → `evolve.md` (self-improve)

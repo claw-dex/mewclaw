@@ -1,0 +1,4 @@
+[submodule "v1/base"]
+	path = v1/base
+	url = git@github.com:claw-dex/claw-dna.git
+	branch = v1/base
