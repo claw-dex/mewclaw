@@ -22,7 +22,7 @@ MewClaw is a lightweight alternative to OpenClaw that runs in containers for sec
 └─────────────────────────────────────────┘
          ▲                    ▲
          │ docker exec        │ docker commit
-         │ (every 5 min)      │ (every 4 hrs)
+         │ (every 15 min)     │ (every 4 hrs)
     ┌────┴────────────────────┴────┐
     │  orchestrator.sh (on host)   │
     └──────────────────────────────┘
@@ -30,13 +30,21 @@ MewClaw is a lightweight alternative to OpenClaw that runs in containers for sec
 
 ## Quick Start
 
-### 1. Build the seed image
+### 1. Initialize the DNA submodule
+
+MewClaw uses the [claw-dna](https://github.com/claw-dex/claw-dna) repository as a submodule for its agent initial base state. It act like a DNA for the agent to evolve from. You can customize it or even change to a different DNA by set the `AGENT_DNA` dockerfile argument to a different base directory contain the new DNA.
+
+```bash
+git submodule update --init --recursive
+```
+
+### 2. Build the seed image
 
 ```bash
 docker build -t myagent:seed .
 ```
 
-### 2. First run — start the container
+### 3. First run — start the container
 
 ```bash
 docker run -d --name myagent -p 8080:8080 myagent:seed
@@ -54,7 +62,7 @@ Alternatively can mount the existing credential file to skip Claude authenticati
 docker run -d --name myagent -p 8080:8080 -v ~/.claude/credentials.json:/home/agent/.claude/credentials.json myagent:seed
 ```
 
-### 3. Authenticate Claude Code
+### 4. Authenticate Claude Code
 
 In a **second terminal**, open the Claude CLI interactively:
 
@@ -69,17 +77,17 @@ no restart needed.
 > **Ports:** 8080 (Caddy gateway), 8081 (Streamlit at /app/).
 > 8082-8090 are available for additional services the agent may create.
 
-### 4. Commit the authenticated state
+### 5. Commit the authenticated state
 
 ```bash
 docker commit myagent myagent:authenticated
 ```
 
-### 5. Open the web portal
+### 6. Open the web portal
 
 Visit **<http://localhost:8080/>** and follow instructions to bootstrap the agent.
 
-### 6. Start automatic heartbeats
+### 7. Start automatic heartbeats
 
 ```bash
 chmod +x orchestrator.sh
@@ -89,7 +97,7 @@ chmod +x orchestrator.sh
 ## Orchestrator Options
 
 ```bash
-./orchestrator.sh                          # defaults: 5min heartbeat, 4hr snapshot
+./orchestrator.sh                          # defaults: 15min heartbeat, 4hr snapshot
 ./orchestrator.sh --interval 60            # heartbeat every 60 seconds
 ./orchestrator.sh --snapshot-interval 7200 # snapshot every 2 hours
 ./orchestrator.sh --snapshot               # manual snapshot now
@@ -131,27 +139,38 @@ docker exec myagent cat /agent/memory/journal.json
 ## File Structure
 
 ```
-ai-agent/
+mewclaw/
 ├── Dockerfile          # Seed image definition
-├── bootstrap.sh        # First-run setup & entrypoint
-├── heartbeat.sh        # Single cycle runner (called via docker exec)
-├── Caddyfile           # Caddy gateway configuration
-├── server.py           # Streamlit web portal (managed by bootstrap.sh)
-├── constitution.md     # Immutable rules (read-only inside container)
 ├── orchestrator.sh     # Host-side heartbeat loop & snapshot manager
+├── docker-compose.yml  # Development mode with volume mounts
 ├── README.md
-└── prompts/
-    ├── bootstrap.md    # First cycle: build the web portal
-    ├── self-heal.md    # Portal broken: diagnose & fix
-    ├── goal.md         # User assigned a task
-    └── evolve.md       # No task: self-improve
+└── v1/base/            # DNA submodule (from claw-dex/claw-dna)
+    ├── bootstrap.sh    # First-run setup & entrypoint
+    ├── heartbeat.sh    # Single cycle runner (called via docker exec)
+    ├── agent.sh        # Agent execution wrapper
+    ├── Caddyfile       # Caddy gateway configuration
+    ├── server.py       # Streamlit web portal (managed by bootstrap.sh)
+    ├── constitution.md # Immutable rules (read-only inside container)
+    ├── pyproject.toml  # Python dependencies
+    ├── scripts/        # Utility scripts
+    ├── seed/           # Installation scripts
+    └── prompts/
+        ├── bootstrap.md # First cycle: build the web portal
+        ├── self-heal.md # Portal broken: diagnose & fix
+        ├── goal.md      # User assigned a task
+        └── evolve.md    # No task: self-improve
 ```
 
 ## How Prompt Selection Works
 
-Each heartbeat, the agent selects its prompt based on priority:
+Each heartbeat, the agent selects its prompt based on this priority hierarchy (implemented in [v1/base/heartbeat.sh](v1/base/heartbeat.sh)):
 
-1. **No state.json exists** → `bootstrap.md` (build portal from scratch)
-2. **Portal health check fails** → `self-heal.md` (fix portal first)
-3. **Commands in inbox.json** → `goal.md` (process user commands)
-4. **Everything healthy, no tasks** → `evolve.md` (self-improve)
+1. **No state.json exists OR cycle_number == 0** → `bootstrap.md` (build portal from scratch)
+2. **Portal health check fails** → `self-heal.md` with symptom details:
+   - Streamlit health endpoint not returning "ok" → `heal:server_down`
+   - App render check fails (syntax/import/runtime errors) → `heal:app_error`
+3. **Force evolve if no evolve in last 5 cycles** → `evolve.md` (prevents starvation by goals/inbox)
+4. **Commands in inbox.json OR active goals pending/in-progress** → `goal.md` (process user commands)
+5. **Everything healthy, no tasks** → `evolve.md` (self-improve)
+
+The agent also supports **sleep mode** (via `--agent-sleep` flag) which skips cycles during 00:00–08:00 user timezone unless inbox has pending items.

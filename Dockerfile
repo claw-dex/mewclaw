@@ -64,6 +64,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Caddy binary (gateway) ─────────────────────────────────────
 COPY --from=caddy:2-alpine /usr/bin/caddy /usr/bin/caddy
 
+# ── Install Node.js 22 ────────────────────────────────────────
+# Required for agent-browser CLI and used by various skills/scripts.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version && npm --version
+
+# ── Install uv (fast Python package manager) ─────────────────
+# The agent manages Python deps via /agent/pyproject.toml.
+# uv is written in Rust — installs packages in seconds.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # ── Create non-root agent user ────────────────────────────────
 # --dangerously-skip-permissions requires a non-root user.
 # Grant passwordless sudo so the agent can still install packages.
@@ -71,8 +85,34 @@ RUN useradd -m -s /bin/bash agent \
     && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
 
-# ── Agent directory structure ────────────────────────────────
-# This is the agent's "body" — each directory is an organ.
+# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
+# All bundled in a single seed script for cleaner caching.
+# Must run before switching to agent user to avoid sudo.
+COPY ${AGENT_DNA}/seed/ /tmp/seed/
+RUN chmod +x /tmp/seed/*.sh && /tmp/seed/install.sh && rm -rf /tmp/seed/ \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm cache clean --force 2>/dev/null || true
+ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
+
+# ── Create /agent directory with proper ownership ─────────────
+RUN mkdir -p /agent && chown -R agent:agent /agent
+
+# ── Switch to agent user for git clone & runtime ──────────────
+USER agent
+
+# ── Clone agent DNA repository ────────────────────────────────
+# Clone the agent DNA from the source repository, then later COPY
+# commands will override files with local uncommitted changes for
+# development and testing.
+RUN git config --global user.email "bot@0xgosu.dev" \
+    && git config --global user.name "MewClaw-Agent" \
+    && git clone --branch ${AGENT_DNA} --single-branch --depth=1 \
+       https://github.com/claw-dex/claw-dna.git /agent
+
+WORKDIR /agent
+
+# ── Create additional agent directories ───────────────────────
+# Ensure required directories exist (some may not be in the DNA repo).
 RUN mkdir -p \
     /agent/memory/logs \
     /agent/messages \
@@ -83,36 +123,7 @@ RUN mkdir -p \
     /agent/.streamlit \
     /home/agent/.keepass \
     /home/agent/.ssh \
-    && chown -R agent:agent /agent \
-    && chown -R agent:agent /home/agent/.keepass \
-    && chown agent:agent /home/agent/.ssh \
     && chmod 700 /home/agent/.ssh
-
-# ── Switch to agent user for CLI install & runtime ────────────
-USER agent
-WORKDIR /agent
-
-# ── Install Node.js 22 ────────────────────────────────────────
-# Required for agent-browser CLI and used by various skills/scripts.
-RUN sudo apt-get update \
-    && sudo apt-get install -y --no-install-recommends gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - \
-    && sudo apt-get install -y --no-install-recommends nodejs \
-    && sudo rm -rf /var/lib/apt/lists/* \
-    && node --version && npm --version
-
-# ── Install uv (fast Python package manager) ─────────────────
-# The agent manages Python deps via /agent/pyproject.toml.
-# uv is written in Rust — installs packages in seconds.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
-# All bundled in a single seed script for cleaner caching.
-COPY --chown=agent:agent ${AGENT_DNA}/seed/ /tmp/seed/
-RUN chmod +x /tmp/seed/*.sh && /tmp/seed/install.sh && rm -rf /tmp/seed/ \
-    && sudo rm -rf /var/lib/apt/lists/* \
-    && npm cache clean --force 2>/dev/null || true
-ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
 # ── Copy pyproject.toml & sync dependencies ──────────────────
 COPY --chown=agent:agent ${AGENT_DNA}/pyproject.toml /agent/pyproject.toml
@@ -136,25 +147,26 @@ RUN claude --version
 COPY --chown=agent:agent claude-code/.claude.json   /home/agent/.claude.json
 COPY --chown=agent:agent claude-code/claude-system-prompt.md /tmp/claude-system-prompt.md
 
-# ── Copy agent files (last COPY for cache optimisation) ──────
+# ── Override with local changes for development ──────────────
+# These COPY commands override the cloned DNA files with local
+# uncommitted changes, allowing development and testing.
 COPY --chown=agent:agent Dockerfile      /agent/Dockerfile
 COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
 RUN cat /tmp/claude-system-prompt.md >> /agent/system.md && rm /tmp/claude-system-prompt.md
 
-# ── Symlink Claude Code auto-memory to agent memory dir ────
-RUN mkdir -p /home/agent/.claude/projects/-agent \
-    && ln -s /agent/memory /home/agent/.claude/projects/-agent/memory
-
 # ── Generate seed .md memory files from JSON data ─────────────
 RUN cd /agent && uv run python scripts/memory-sync.py
 
-# ── Set permissions, init message queues, init git ────────────
+# ── Set permissions, init message queues, link files ────────────
+# Symlink Claude Code auto-memory to agent memory dir
 RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scripts/*.sh \
     && chmod 444 /agent/constitution.md \
     && echo '[]' > /agent/messages/inbox.json \
     && echo '[]' > /agent/messages/outbox.json \
     && ln -s /agent/skills /agent/.claude/skills \
-    && ln -s /agent/AGENTS.md /agent/.claude/CLAUDE.md
+    && ln -s /agent/AGENTS.md /agent/.claude/CLAUDE.md \
+    && mkdir -p /home/agent/.claude/projects/-agent \
+    && ln -s /agent/memory /home/agent/.claude/projects/-agent/memory
 
 # ── Expose port range ──────────────────────────────────────────
 # 8080 = Caddy gateway

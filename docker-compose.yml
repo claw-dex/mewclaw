@@ -5,7 +5,7 @@
 #  can edit and test without rebuilding the image.
 #
 #  Prerequisites:
-#    docker build -t myagent:seed .
+#    Run `docker compose build` (OR `docker build -t myagent:seed .`)
 #
 #  Usage:
 #    docker compose up -d            # start
