@@ -145,14 +145,13 @@ RUN claude --version
 
 # ── Copy claude-code config ──────────────────────────────────
 COPY --chown=agent:agent claude-code/.claude.json   /home/agent/.claude.json
-COPY --chown=agent:agent claude-code/claude-system-prompt.md /tmp/claude-system-prompt.md
+COPY --chown=agent:agent claude-code/claude-system-prompt.md /home/agent/claude-system-prompt.md
 
 # ── Override with local changes for development ──────────────
 # These COPY commands override the cloned DNA files with local
 # uncommitted changes, allowing development and testing.
 COPY --chown=agent:agent Dockerfile      /agent/Dockerfile
 COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
-RUN cat /tmp/claude-system-prompt.md >> /agent/system.md && rm /tmp/claude-system-prompt.md
 
 # ── Generate seed .md memory files from JSON data ─────────────
 RUN cd /agent && uv run python scripts/memory-sync.py
