@@ -25,6 +25,7 @@ HEARTBEAT_INTERVAL=900      # seconds (15 minutes)
 SNAPSHOT_INTERVAL=14400     # seconds (4 hours)
 IMAGE_NAME="myagent"
 AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox has items)
+MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
 
 # ── Colors ───────────────────────────────────────────────────
 BLUE='\033[0;36m'
@@ -42,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         --snapshot-interval) SNAPSHOT_INTERVAL="$2"; shift 2 ;;
         --container)      CONTAINER="$2"; shift 2 ;;
         --agent-sleep)    AGENT_SLEEP=true; shift ;;
+        --max-evolve)     MAX_CONSECUTIVE_EVOLVE="$2"; shift 2 ;;
         --snapshot)
             # Manual snapshot and exit
             TAG="manual-$(date +%Y%m%d-%H%M%S)"
@@ -58,6 +60,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --snapshot-interval N Snapshot interval in seconds (default: 14400)"
             echo "  --container NAME      Container name (default: myagent)"
             echo "  --agent-sleep         Enable sleep mode (skip cycles 00:00–08:00 unless inbox has items)"
+            echo "  --max-evolve N        Max consecutive evolve cycles before skipping (default: 5)"
             echo "  --snapshot            Take a manual snapshot and exit"
             echo "  --help                Show this help"
             exit 0
@@ -73,6 +76,7 @@ echo -e "  Container:          ${BOLD}${CONTAINER}${NC}"
 echo -e "  Heartbeat interval: ${BOLD}${HEARTBEAT_INTERVAL}s${NC} ($(( HEARTBEAT_INTERVAL / 60 ))min)"
 echo -e "  Snapshot interval:  ${BOLD}${SNAPSHOT_INTERVAL}s${NC} ($(( SNAPSHOT_INTERVAL / 3600 ))hr)"
 echo -e "  Sleep mode:         ${BOLD}$( $AGENT_SLEEP && echo "ON (00:00–08:00)" || echo "OFF" )${NC}"
+echo -e "  Max evolve cycles:  ${BOLD}${MAX_CONSECUTIVE_EVOLVE:-5 (default)}${NC}"
 echo ""
 
 # Check container is running
@@ -97,9 +101,10 @@ heartbeat() {
     echo -e "${BLUE}[${ts}]${NC} Heartbeat: waking agent..."
 
     # Run heartbeat, capture exit code
-    local sleep_flag=""
-    $AGENT_SLEEP && sleep_flag="--agent-sleep"
-    if docker exec "$CONTAINER" /agent/heartbeat.sh $sleep_flag; then
+    local flags=""
+    $AGENT_SLEEP && flags="--agent-sleep"
+    [ -n "$MAX_CONSECUTIVE_EVOLVE" ] && flags="$flags --max-evolve $MAX_CONSECUTIVE_EVOLVE"
+    if docker exec "$CONTAINER" /agent/heartbeat.sh $flags; then
         echo -e "${GREEN}[$(ts_now)]${NC} Heartbeat: cycle complete."
     else
         echo -e "${YELLOW}[$(ts_now)]${NC} Heartbeat: cycle exited with error (agent may self-heal next cycle)."

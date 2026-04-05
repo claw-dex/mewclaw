@@ -151,12 +151,34 @@ fi
 echo "[step 5/6] Routing DNS..."
 echo "  Running: cloudflared tunnel route dns ${TUNNEL_ID} ${HOSTNAME}"
 
-cloudflared tunnel route dns "${TUNNEL_ID}" "${HOSTNAME}" || {
+ROUTE_RC=0
+ROUTE_OUTPUT=$(cloudflared tunnel route dns "${TUNNEL_ID}" "${HOSTNAME}" 2>&1) || ROUTE_RC=$?
+
+if [ "${ROUTE_RC}" -eq 0 ]; then
+  echo "  ${ROUTE_OUTPUT}"
+elif echo "${ROUTE_OUTPUT}" | grep -qi "already exists"; then
+  echo "  DNS route for '${HOSTNAME}' already exists."
+  echo "  ${ROUTE_OUTPUT}"
+  echo ""
+  read -rp "  Remove existing route and re-configure? [y/N]: " confirm_route
+  if [[ "${confirm_route}" =~ ^[Yy]$ ]]; then
+    echo "  Re-routing with --overwrite-dns..."
+    cloudflared tunnel route dns --overwrite-dns "${TUNNEL_ID}" "${HOSTNAME}" || {
+      echo ""
+      echo "  WARNING: DNS re-routing failed. You may need to set it up manually:"
+      echo "    cloudflared tunnel route dns --overwrite-dns ${TUNNEL_ID} ${HOSTNAME}"
+      echo ""
+    }
+  else
+    echo "  Skipping DNS routing."
+  fi
+else
+  echo "  ${ROUTE_OUTPUT}"
   echo ""
   echo "  WARNING: DNS routing failed. You may need to set it up manually:"
   echo "    cloudflared tunnel route dns ${TUNNEL_ID} ${HOSTNAME}"
   echo ""
-}
+fi
 
 echo ""
 

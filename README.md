@@ -94,6 +94,20 @@ chmod +x orchestrator.sh
 ./orchestrator.sh
 ```
 
+## Start in background
+
+```bash
+nohup ./orchestrator.sh > output.log 2>&1 & echo $! > orchestrator.pid
+# with custom arguments:
+nohup ./orchestrator.sh --agent-sleep > output.log 2>&1 & echo $! > orchestrator.pid
+```
+
+To stop:
+
+```bash
+kill $(cat orchestrator.pid)
+```
+
 ## Orchestrator Options
 
 ```bash
@@ -101,6 +115,7 @@ chmod +x orchestrator.sh
 ./orchestrator.sh --interval 60            # heartbeat every 60 seconds
 ./orchestrator.sh --snapshot-interval 7200 # snapshot every 2 hours
 ./orchestrator.sh --snapshot               # manual snapshot now
+./orchestrator.sh --agent-sleep            # enable sleep mode (skips cycles between 00-08 unless inbox has pending items)
 ```
 
 ## Rollback
