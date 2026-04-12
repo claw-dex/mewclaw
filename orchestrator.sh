@@ -7,7 +7,7 @@
 #  Creates snapshots via docker commit on a schedule.
 #
 #  Usage:
-#    ./orchestrator.sh --container <name>  # default: container name="myagent" heartbeat every 15min, snapshot every 4hr 
+#    ./orchestrator.sh --container <name>  # default: container name="myagent" heartbeat every 15min, snapshot every 8hr
 #    ./orchestrator.sh --interval 300 --snapshot-interval 7200 # heartbeat every 5min, snapshot every 2hr
 #    ./orchestrator.sh --snapshot   # run manual snapshot only then exit
 #    ./orchestrator.sh --agent-sleep # when enabled, skip heartbeat cycles between 00:00 and 08:00 unless the agent's inbox has items.
@@ -22,7 +22,7 @@ ts_now() { date -u +"%Y-%m-%dT%H:%M:%S+00:00"; }
 # ── Defaults ─────────────────────────────────────────────────
 CONTAINER="myagent"
 HEARTBEAT_INTERVAL=900      # seconds (15 minutes)
-SNAPSHOT_INTERVAL=14400     # seconds (4 hours)
+SNAPSHOT_INTERVAL=28800     # seconds (8 hours)
 IMAGE_NAME="myagent"
 AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox has items)
 MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
@@ -120,6 +120,39 @@ snapshot() {
     echo -e "${GREEN}[$(ts_now)]${NC} Snapshot saved: ${IMAGE_NAME}:${tag}"
 }
 
+cleanup_old_snapshots() {
+    local max_age_secs=172800  # 48 hours
+    local cleaned=0
+    local now
+    now=$(date +%s)
+
+    while IFS= read -r tag; do
+        [ -z "$tag" ] && continue
+        local created
+        created=$(docker inspect --format '{{.Created}}' "${IMAGE_NAME}:${tag}" 2>/dev/null || echo "")
+        [ -z "$created" ] && continue
+        local snap_ts
+        snap_ts=$(python3 -c "
+from datetime import datetime, timezone
+ts = '$created'
+try:
+    ts = ts.split('.')[0]
+    dt = datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+    print(int(dt.timestamp()))
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+        if [ "$snap_ts" -gt 0 ] && (( now - snap_ts >= max_age_secs )); then
+            echo -e "${DIM}[$(ts_now)] Cleanup: removing old snapshot ${IMAGE_NAME}:${tag}${NC}"
+            docker rmi "${IMAGE_NAME}:${tag}" >/dev/null 2>&1 && cleaned=$((cleaned + 1)) || true
+        fi
+    done < <(docker images "${IMAGE_NAME}" --format "{{.Tag}}" 2>/dev/null | grep "^auto-")
+
+    if [ "$cleaned" -gt 0 ]; then
+        echo -e "${GREEN}[$(ts_now)] Cleanup: removed ${cleaned} old snapshot(s) (>48h)${NC}"
+    fi
+}
+
 # ── Graceful shutdown ────────────────────────────────────────
 RUNNING=true
 trap 'echo -e "\n${YELLOW}Orchestrator stopping...${NC}"; RUNNING=false' INT TERM
@@ -145,6 +178,7 @@ while $RUNNING; do
     NOW=$(date +%s)
     if (( NOW - LAST_SNAPSHOT_START >= SNAPSHOT_INTERVAL )); then
         snapshot
+        cleanup_old_snapshots
         LAST_SNAPSHOT_START=$(date +%s)
     fi
 
