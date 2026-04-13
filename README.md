@@ -22,7 +22,7 @@ MewClaw is a lightweight alternative to OpenClaw that runs in containers for sec
 └─────────────────────────────────────────┘
          ▲                    ▲
          │ docker exec        │ docker commit
-         │ (every 15 min)     │ (every 4 hrs)
+         │ (every 15 min)     │ (every 8 hrs)
     ┌────┴────────────────────┴────┐
     │  orchestrator.sh (on host)   │
     └──────────────────────────────┘
@@ -105,12 +105,69 @@ kill $(cat orchestrator.pid)
 ## Orchestrator Options
 
 ```bash
-./orchestrator.sh                          # defaults: 15min heartbeat, 4hr snapshot
+./orchestrator.sh                          # defaults: 15min heartbeat, 8hr snapshot
 ./orchestrator.sh --interval 60            # heartbeat every 60 seconds
 ./orchestrator.sh --snapshot-interval 7200 # snapshot every 2 hours
 ./orchestrator.sh --snapshot               # manual snapshot now
 ./orchestrator.sh --agent-sleep            # enable sleep mode (skips cycles between 00-08 unless inbox has pending items)
 ```
+
+## Cloudflare Tunnel (External Access)
+
+To expose the portal publicly, set up a Cloudflare Tunnel so the agent is reachable at a custom domain.
+
+### 1. Install cloudflared
+
+On Debian/Ubuntu:
+
+```bash
+bash scripts/installer/install_cloudflared_debian.sh
+```
+
+Otherwise install from the [Cloudflare downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+
+### 2. Run the tunnel setup script
+
+```bash
+bash scripts/setup_cloudflare_tunnel.sh
+```
+
+The script will:
+1. Verify `cloudflared` is installed
+2. Log you in to Cloudflare (opens a browser)
+3. Prompt for a tunnel name and create it
+4. Prompt for a hostname (e.g. `agent.example.com`) and generate `cloudflared/config.yml`
+5. Route DNS for the hostname to the tunnel
+
+### 3. Start the tunnel
+
+```bash
+# Manually
+cloudflared tunnel --config cloudflared/config.yml run
+
+# As a systemd service
+sudo mkdir -p /etc/cloudflared/
+sudo cp cloudflared/config.yml /etc/cloudflared/config.yml
+sudo cloudflared service install
+sudo systemctl start cloudflared
+```
+
+### 4. Configure the portal hostname
+
+Once the tunnel is running, tell the agent its public URL so it uses it in links and the system prompt.
+
+**Via the web portal (recommended):** Open the **System** tab → expand **Run Script** → select `portal_config.py` → set subcommand to `hostname` → enter your URL in `--set` → click Run.
+
+**Via CLI:**
+
+```bash
+docker exec myagent bash -c \
+  'cd /agent && uv run python scripts/portal_config.py hostname --set https://agent.example.com'
+```
+
+> The hostname is stored in `/agent/memory/portal_config.json` and injected into the agent's system prompt each heartbeat.
+
+---
 
 ## Rollback
 

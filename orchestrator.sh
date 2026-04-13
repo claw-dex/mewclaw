@@ -28,7 +28,7 @@ AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox
 MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
 
 # ── Colors ───────────────────────────────────────────────────
-BLUE='\033[0;36m'
+CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
         --snapshot)
             # Manual snapshot and exit
             TAG="manual-$(date +%Y%m%d-%H%M%S)"
-            echo -e "${BLUE}Creating snapshot: ${IMAGE_NAME}:${TAG}${NC}"
+            echo -e "${CYAN}Creating snapshot: ${IMAGE_NAME}:${TAG}${NC}"
             docker commit "$CONTAINER" "${IMAGE_NAME}:${TAG}"
             echo -e "${GREEN}✔ Snapshot saved: ${IMAGE_NAME}:${TAG}${NC}"
             exit 0
@@ -56,8 +56,8 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: ./orchestrator.sh [options]"
             echo ""
             echo "Options:"
-            echo "  --interval N          Heartbeat interval in seconds (default: 300)"
-            echo "  --snapshot-interval N Snapshot interval in seconds (default: 14400)"
+            echo "  --interval N          Heartbeat interval in seconds (default: 900)"
+            echo "  --snapshot-interval N Snapshot interval in seconds (default: 28800)"
             echo "  --container NAME      Container name (default: myagent)"
             echo "  --agent-sleep         Enable sleep mode (skip cycles 00:00–08:00 unless inbox has items)"
             echo "  --max-evolve N        Max consecutive evolve cycles before skipping (default: 5)"
@@ -70,7 +70,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Pre-flight check ─────────────────────────────────────────
-echo -e "${BOLD}${BLUE}MewClaw — Orchestrator${NC}"
+echo -e "${BOLD}${CYAN}MewClaw — Orchestrator${NC}"
 echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
 echo -e "  Container:          ${BOLD}${CONTAINER}${NC}"
 echo -e "  Heartbeat interval: ${BOLD}${HEARTBEAT_INTERVAL}s${NC} ($(( HEARTBEAT_INTERVAL / 60 ))min)"
@@ -98,7 +98,7 @@ echo ""
 
 heartbeat() {
     local ts=$(ts_now)
-    echo -e "${BLUE}[${ts}]${NC} Heartbeat: waking agent..."
+    echo -e "${CYAN}[${ts}]${NC} Heartbeat: waking agent..."
 
     # Run heartbeat, capture exit code
     local flags=""
@@ -115,7 +115,7 @@ snapshot() {
     local tag="${1:-auto-$(date +%Y%m%d-%H%M%S)}"
     local ts=$(ts_now)
 
-    echo -e "${BLUE}[${ts}]${NC} Snapshot: creating ${IMAGE_NAME}:${tag}..."
+    echo -e "${CYAN}[${ts}]${NC} Snapshot: creating ${IMAGE_NAME}:${tag}..."
     docker commit "$CONTAINER" "${IMAGE_NAME}:${tag}" >/dev/null
     echo -e "${GREEN}[$(ts_now)]${NC} Snapshot saved: ${IMAGE_NAME}:${tag}"
 }

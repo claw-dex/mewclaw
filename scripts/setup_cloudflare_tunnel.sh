@@ -27,7 +27,7 @@ if ! command -v cloudflared &>/dev/null; then
   echo "    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
   echo ""
   echo "  On Debian/Ubuntu:"
-  echo "    bash scripts/install-cloudflared-debian.sh   (if available)"
+  echo "    bash scripts/install_cloudflared_debian.sh   (if available)"
   echo ""
   exit 1
 fi

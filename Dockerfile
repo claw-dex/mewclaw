@@ -13,7 +13,7 @@ LABEL version="1.0.0"
 ARG AGENT_DNA=v1/base
 
 # ── Avoid interactive prompts during build ───────────────────
-ENV DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
 # ── System packages ──────────────────────────────────────────
 # Core utilities the agent needs from birth.
@@ -152,8 +152,11 @@ COPY --chown=agent:agent claude-code/claude-system-prompt.md /home/agent/claude-
 COPY --chown=agent:agent Dockerfile      /agent/Dockerfile
 COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
 
+# Remove build-time-only seed scripts from final image
+RUN rm -rf /agent/seed/
+
 # ── Generate seed .md memory files from JSON data ─────────────
-RUN cd /agent && uv run python scripts/memory-sync.py
+RUN cd /agent && uv run python scripts/memory_sync.py
 
 # ── Set permissions, init message queues, link files ────────────
 # Symlink Claude Code auto-memory to agent memory dir
@@ -167,8 +170,8 @@ RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scri
     && ln -s /agent/memory /home/agent/.claude/projects/-agent/memory
 
 # ── Expose port range ──────────────────────────────────────────
-# 8080 = Caddy gateway
-EXPOSE 8080
+# 8080 = Caddy gateway, 8081 = Streamlit, 8082 = webhook_receiver
+EXPOSE 8080 8081 8082
 
 # ── Bootstrap is the entrypoint ──────────────────────────────
 ENTRYPOINT ["/agent/bootstrap.sh"]

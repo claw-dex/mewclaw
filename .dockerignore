@@ -23,3 +23,7 @@ __pycache__/
 docker-compose.yml
 .dockerignore
 README.md
+LICENSE
+orchestrator.sh
+scripts/
+cloudflared/
