@@ -133,8 +133,7 @@ RUN cd /agent && uv sync
 # The installer may place the binary at ~/.claude/bin or ~/.local/bin
 # depending on the version. We cover both and verify the result.
 # Timeout prevents the known hang bug on minimal images (GH #5209).
-RUN timeout 120 bash -c 'curl -fsSL https://claude.ai/install.sh | bash' \
-    || true
+RUN timeout 120 bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
 
 # Locate the binary and ensure it is on PATH
 # The installer has used different locations across versions.

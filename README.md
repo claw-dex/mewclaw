@@ -74,20 +74,14 @@ Complete the authentication flow inside the CLI, then exit (`/exit`).
 The bootstrap detects the auth automatically and finishes setup —
 no restart needed.
 
-> **Ports:** 8080 (Caddy gateway), 8081 (Streamlit at /app/).
-> 8082-8090 are available for additional services the agent may create.
+> **Ports:** 8080 (Caddy gateway), 8081 (Streamlit at /app/), 8082 (webhook_receiver — auto-starts each heartbeat).
+> 8083-8090 are available for additional services the agent may create.
 
-### 5. Commit the authenticated state
-
-```bash
-docker commit myagent myagent:authenticated
-```
-
-### 6. Open the web portal
+### 5. Open the web portal
 
 Visit **<http://localhost:8080/>** and follow instructions to bootstrap the agent.
 
-### 7. Start automatic heartbeats
+### 6. Start automatic heartbeats
 
 ```bash
 chmod +x orchestrator.sh
@@ -163,11 +157,31 @@ mewclaw/
     ├── bootstrap.sh    # First-run setup & entrypoint
     ├── heartbeat.sh    # Single cycle runner (called via docker exec)
     ├── agent.sh        # Agent execution wrapper
-    ├── Caddyfile       # Caddy gateway configuration
+    ├── Caddyfile       # Caddy gateway configuration (production)
+    ├── Caddyfile.setup # Caddy configuration for first-run setup mode
+    ├── setup.html      # First-run authentication guide page
+    ├── index.html      # Portal redirect page
     ├── server.py       # Streamlit web portal (managed by bootstrap.sh)
     ├── constitution.md # Immutable rules (read-only inside container)
     ├── pyproject.toml  # Python dependencies
     ├── scripts/        # Utility scripts
+    │   ├── service-manager.py  # Background service lifecycle manager
+    │   ├── scheduler.py        # Scheduled task runner
+    │   ├── notes.py            # Persistent notes store
+    │   ├── reminder.py         # Reminder management
+    │   ├── keepass.py          # Credential store access
+    │   └── ...                 # Other utility scripts
+    ├── services/       # Long-running background services
+    │   ├── webhook_receiver.py # Incoming webhook handler (port 8082, auto-start)
+    │   ├── telegram_bridge.py  # Telegram messaging bridge
+    │   └── whatsapp_bridge.py  # WhatsApp messaging bridge
+    ├── skills/         # Agent skill definitions (SKILL.md files)
+    │   ├── service-manager/    # Background service management
+    │   ├── scheduler/          # Task scheduling
+    │   ├── notes/              # Notes management
+    │   ├── reminder/           # Reminder management
+    │   ├── caddy/              # Caddy gateway configuration
+    │   └── ...                 # Other skills
     ├── seed/           # Installation scripts
     └── prompts/
         ├── bootstrap.md # First cycle: build the web portal
@@ -178,7 +192,13 @@ mewclaw/
 
 ## How Prompt Selection Works
 
-Each heartbeat, the agent selects its prompt based on this priority hierarchy (implemented in [v1/base/heartbeat.sh](v1/base/heartbeat.sh)):
+Each heartbeat, the agent runs the following steps (implemented in [v1/base/heartbeat.sh](v1/base/heartbeat.sh)):
+
+**Pre-cycle steps (before prompt selection):**
+- **Scheduled tasks** — due tasks from `scheduled_tasks.json` are injected into inbox
+- **Auto-start services** — any service with `"auto_start": true` in `services.json` that is not running is restarted (`service-manager.py auto-start`)
+
+**Prompt selection priority:**
 
 1. **No state.json exists OR cycle_number == 0** → `bootstrap.md` (build portal from scratch)
 2. **Portal health check fails** → `self-heal.md` with symptom details:
@@ -186,6 +206,7 @@ Each heartbeat, the agent selects its prompt based on this priority hierarchy (i
    - App render check fails (syntax/import/runtime errors) → `heal:app_error`
 3. **Force evolve if no evolve in last 5 cycles** → `evolve.md` (prevents starvation by goals/inbox)
 4. **Commands in inbox.json OR active goals pending/in-progress** → `goal.md` (process user commands)
-5. **Everything healthy, no tasks** → `evolve.md` (self-improve)
+5. **Last N consecutive cycles were all evolve** → skip cycle (prevents evolve loop)
+6. **Everything healthy, no tasks** → `evolve.md` (self-improve)
 
 The agent also supports **sleep mode** (via `--agent-sleep` flag) which skips cycles during 00:00–08:00 user timezone unless inbox has pending items.
