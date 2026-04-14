@@ -91,7 +91,7 @@ Complete the authentication flow, then exit (`/exit`). The bootstrap detects the
 
 ```bash
 ./orchestrator.sh  # use container name "myagent" as default
-./orchestrator.sh --agent-name myagent2  # specify container name if running multiple agents
+./orchestrator.sh --container myagent2  # specify container name if running multiple agents
 ```
 
 ## Development

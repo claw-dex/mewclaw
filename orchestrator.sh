@@ -26,6 +26,7 @@ SNAPSHOT_INTERVAL=28800     # seconds (8 hours)
 IMAGE_NAME=""               # derived from container image after arg parsing if not set via --image
 AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox has items)
 MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
+DO_SNAPSHOT=false           # set by --snapshot flag; executed after IMAGE_NAME is resolved
 
 # ── Colors ───────────────────────────────────────────────────
 CYAN='\033[0;36m'
@@ -45,14 +46,7 @@ while [[ $# -gt 0 ]]; do
         --image)          IMAGE_NAME="$2"; shift 2 ;;
         --agent-sleep)    AGENT_SLEEP=true; shift ;;
         --max-evolve)     MAX_CONSECUTIVE_EVOLVE="$2"; shift 2 ;;
-        --snapshot)
-            # Manual snapshot and exit
-            TAG="manual-$(date +%Y%m%d-%H%M%S)"
-            echo -e "${CYAN}Creating snapshot: ${IMAGE_NAME}:${TAG}${NC}"
-            docker commit "$CONTAINER" "${IMAGE_NAME}:${TAG}"
-            echo -e "${GREEN}✔ Snapshot saved: ${IMAGE_NAME}:${TAG}${NC}"
-            exit 0
-            ;;
+        --snapshot)   DO_SNAPSHOT=true; shift ;;
         --help|-h)
             echo "Usage: ./orchestrator.sh [options]"
             echo ""
@@ -77,6 +71,15 @@ if [[ -z "$IMAGE_NAME" ]]; then
     IMAGE_NAME="${_raw%%:*}"   # strip tag (e.g. "myagent:seed" → "myagent")
     IMAGE_NAME="${IMAGE_NAME:-myagent}"  # fallback if container not found yet
     unset _raw
+fi
+
+# ── Manual snapshot (--snapshot flag) ───────────────────────
+if $DO_SNAPSHOT; then
+    TAG="manual-$(date +%Y%m%d-%H%M%S)"
+    echo -e "${CYAN}Creating snapshot: ${IMAGE_NAME}:${TAG}${NC}"
+    docker commit "$CONTAINER" "${IMAGE_NAME}:${TAG}"
+    echo -e "${GREEN}✔ Snapshot saved: ${IMAGE_NAME}:${TAG}${NC}"
+    exit 0
 fi
 
 # ── Pre-flight check ─────────────────────────────────────────
