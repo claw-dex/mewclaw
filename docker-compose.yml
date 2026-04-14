@@ -26,7 +26,7 @@ x-agent-base: &agent-base
 services:
   codasst:
     <<: *agent-base
-    image: ghcr.io/claw-dex/codasst:v1.0.0
+    image: ghcr.io/claw-dex/codasst:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -46,7 +46,7 @@ services:
 
   engagius:
     <<: *agent-base
-    image: ghcr.io/claw-dex/engagius:v1.0.0
+    image: ghcr.io/claw-dex/engagius:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -66,7 +66,7 @@ services:
 
   proximate:
     <<: *agent-base
-    image: ghcr.io/claw-dex/proximate:v1.0.0
+    image: ghcr.io/claw-dex/proximate:latest
     build:
       context: .
       dockerfile: Dockerfile

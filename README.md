@@ -69,13 +69,35 @@ docker logs -f myagent
 
 ### 2. Authenticate Claude Code
 
-Open the Claude CLI interactively inside the container:
+Choose one of the following options:
+
+**Option A — Interactive login (default)**
 
 ```bash
 docker exec -it myagent claude
 ```
 
 Complete the authentication flow, then exit (`/exit`). The bootstrap detects the auth automatically — no restart needed.
+
+**Option B — OAuth token via environment variable**
+
+Pass a Claude OAuth token at startup to skip the interactive flow entirely:
+
+```bash
+docker run -d --name myagent -p 8080:8080 \
+  -e CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-xxxxxx \
+  ghcr.io/claw-dex/codasst:latest
+```
+
+**Option C — Mount local credentials (reuse host auth)**
+
+If you are already authenticated on the host, mount the credential file so the container reuses it without any additional login:
+
+```bash
+docker run -d --name myagent -p 8080:8080 \
+  -v ~/.claude/.credentials.json:/home/agent/.claude/.credentials.json:ro \
+  ghcr.io/claw-dex/codasst:latest
+```
 
 > **Tip:** Ports 8080 / 8180 / 8280 is used for the web portal of the agent. Different ports are used to allow running multiple agents simultaneously without conflicts.
 
@@ -213,7 +235,7 @@ Once the tunnel is running, tell the agent its public URL so it uses it in links
 
 ```bash
 docker exec myagent bash -c \
-  'cd /agent && uv run python scripts/portal_config.py hostname --set https://agent.example.com'
+  'uv run python scripts/portal_config.py hostname --set https://agent.example.com'
 ```
 
 > The hostname is stored in `/agent/memory/portal_config.json` and injected into the agent's system prompt each heartbeat.
@@ -240,18 +262,37 @@ docker run -d --name myagent -p 8080:8080 myagent:<tag-to-restore>
 
 Use the command center to send goals, abort tasks, or give feedback.
 
-### Via CLI
+### Via Telegram
+
+The Telegram bridge polls your bot for incoming messages and forwards the agent's outbox replies back to you.
+
+**1. Create a bot**
+
+Open Telegram, message [@BotFather](https://t.me/BotFather), and run `/newbot`. Copy the token it gives you.
+
+**2. Store the token in the agent's credential store**
 
 ```bash
-# Send a goal
-docker exec myagent bash -c 'echo "[{\"type\":\"goal\",\"content\":\"Build a calculator app\",\"timestamp\":\"$(date -Is)\"}]" > /agent/messages/inbox.json'
+# One-time: initialise the credential database if it doesn't exist yet
+docker exec -it myagent bash -c \
+  'cd /agent && uv run python scripts/keepass.py init'
 
-# Read agent status
-docker exec myagent cat /agent/memory/state.json | jq .
-
-# Read journal
-docker exec myagent cat /agent/memory/journal.json
+# Store the bot token
+docker exec -it myagent bash -c \
+  'cd /agent && uv run python scripts/keepass.py store \
+   --title TELEGRAM_BOT_TOKEN --username bot --password "<your-token>"'
 ```
+
+**3. Start the bridge service**
+
+```bash
+docker exec -it myagent bash -c \
+  'cd /agent && uv run python scripts/service_manager.py restart telegram_bridge'
+```
+
+**4. Send the bot a message on Telegram**
+
+The bridge auto-discovers your chat ID from your first message — no manual configuration needed. After that, every message you send the bot lands in the agent's inbox, and the agent's outbox replies are forwarded back to you.
 
 ## File Structure
 
