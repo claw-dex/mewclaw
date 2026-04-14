@@ -27,3 +27,9 @@ LICENSE
 orchestrator.sh
 scripts/
 cloudflared/
+
+# Agent runtime bind mounts
+codasst/
+engagius/
+proximate/
+shared/

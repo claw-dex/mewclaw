@@ -23,7 +23,7 @@ ts_now() { date -u +"%Y-%m-%dT%H:%M:%S+00:00"; }
 CONTAINER="myagent"
 HEARTBEAT_INTERVAL=900      # seconds (15 minutes)
 SNAPSHOT_INTERVAL=28800     # seconds (8 hours)
-IMAGE_NAME="myagent"
+IMAGE_NAME=""               # derived from container image after arg parsing if not set via --image
 AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox has items)
 MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
 
@@ -42,6 +42,7 @@ while [[ $# -gt 0 ]]; do
         --interval)       HEARTBEAT_INTERVAL="$2"; shift 2 ;;
         --snapshot-interval) SNAPSHOT_INTERVAL="$2"; shift 2 ;;
         --container)      CONTAINER="$2"; shift 2 ;;
+        --image)          IMAGE_NAME="$2"; shift 2 ;;
         --agent-sleep)    AGENT_SLEEP=true; shift ;;
         --max-evolve)     MAX_CONSECUTIVE_EVOLVE="$2"; shift 2 ;;
         --snapshot)
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --interval N          Heartbeat interval in seconds (default: 900)"
             echo "  --snapshot-interval N Snapshot interval in seconds (default: 28800)"
             echo "  --container NAME      Container name (default: myagent)"
+            echo "  --image NAME          Image name for snapshots (default: derived from container image)"
             echo "  --agent-sleep         Enable sleep mode (skip cycles 00:00–08:00 unless inbox has items)"
             echo "  --max-evolve N        Max consecutive evolve cycles before skipping (default: 5)"
             echo "  --snapshot            Take a manual snapshot and exit"
@@ -69,10 +71,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── Derive IMAGE_NAME from container if not explicitly set ───
+if [[ -z "$IMAGE_NAME" ]]; then
+    _raw=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
+    IMAGE_NAME="${_raw%%:*}"   # strip tag (e.g. "myagent:seed" → "myagent")
+    IMAGE_NAME="${IMAGE_NAME:-myagent}"  # fallback if container not found yet
+    unset _raw
+fi
+
 # ── Pre-flight check ─────────────────────────────────────────
 echo -e "${BOLD}${CYAN}MewClaw — Orchestrator${NC}"
 echo -e "${DIM}$(printf '%.0s─' {1..50})${NC}"
 echo -e "  Container:          ${BOLD}${CONTAINER}${NC}"
+echo -e "  Image name:         ${BOLD}${IMAGE_NAME}${NC}"
 echo -e "  Heartbeat interval: ${BOLD}${HEARTBEAT_INTERVAL}s${NC} ($(( HEARTBEAT_INTERVAL / 60 ))min)"
 echo -e "  Snapshot interval:  ${BOLD}${SNAPSHOT_INTERVAL}s${NC} ($(( SNAPSHOT_INTERVAL / 3600 ))hr)"
 echo -e "  Sleep mode:         ${BOLD}$( $AGENT_SLEEP && echo "ON (00:00–08:00)" || echo "OFF" )${NC}"
