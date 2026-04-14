@@ -10,7 +10,7 @@ LABEL description="MewClaw is a lightweight alternative to OpenClaw that runs in
 LABEL version="1.0.0"
 
 # ── Build arguments ────────────────────────────────────────
-ARG AGENT_DNA=v1/base
+ARG AGENT_DNA
 
 # ── Avoid interactive prompts during build ───────────────────
 ARG DEBIAN_FRONTEND=noninteractive
@@ -85,15 +85,6 @@ RUN useradd -m -s /bin/bash agent \
     && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
     && chmod 0440 /etc/sudoers.d/agent
 
-# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
-# All bundled in a single seed script for cleaner caching.
-# Must run before switching to agent user to avoid sudo.
-COPY ${AGENT_DNA}/seed/ /tmp/seed/
-RUN chmod +x /tmp/seed/*.sh && /tmp/seed/install.sh && rm -rf /tmp/seed/ \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm cache clean --force 2>/dev/null || true
-ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
-
 # ── Create /agent directory with proper ownership ─────────────
 RUN mkdir -p /agent && chown -R agent:agent /agent
 
@@ -121,9 +112,19 @@ RUN mkdir -p \
     /agent/prompts \
     /agent/.claude \
     /agent/.streamlit \
+    /home/agent/.config \
     /home/agent/.keepass \
     /home/agent/.ssh \
     && chmod 700 /home/agent/.ssh
+
+# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
+# All bundled in a single seed script for cleaner caching.
+# agent user has passwordless sudo for system-level installs.
+COPY --chown=agent:agent ${AGENT_DNA}/seed/ /agent/seed/
+RUN chmod +x /agent/seed/*.sh && sudo /agent/seed/install.sh \
+    && sudo rm -rf /var/lib/apt/lists/* \
+    && sudo npm cache clean --force 2>/dev/null
+ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
 # ── Copy pyproject.toml & sync dependencies ──────────────────
 COPY --chown=agent:agent ${AGENT_DNA}/pyproject.toml /agent/pyproject.toml
@@ -152,26 +153,25 @@ COPY --chown=agent:agent claude-code/claude-system-prompt.md /home/agent/claude-
 COPY --chown=agent:agent Dockerfile      /agent/Dockerfile
 COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
 
-# Remove build-time-only seed scripts from final image
-RUN rm -rf /agent/seed/
-
 # ── Generate seed .md memory files from JSON data ─────────────
 RUN cd /agent && uv run python scripts/memory_sync.py
 
 # ── Set permissions, init message queues, link files ────────────
-# Symlink Claude Code auto-memory to agent memory dir
 RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scripts/*.sh \
     && chmod 444 /agent/constitution.md \
     && echo '[]' > /agent/messages/inbox.json \
     && echo '[]' > /agent/messages/outbox.json \
     && ln -s /agent/skills /agent/.claude/skills \
-    && ln -s /agent/AGENTS.md /agent/.claude/CLAUDE.md \
-    && mkdir -p /home/agent/.claude/projects/-agent \
-    && ln -s /agent/memory /home/agent/.claude/projects/-agent/memory
+    && ln -s /agent/AGENTS.md /agent/.claude/CLAUDE.md
 
-# ── Expose port range ──────────────────────────────────────────
-# 8080 = Caddy gateway, 8081 = Streamlit, 8082 = webhook_receiver
-EXPOSE 8080 8081 8082
+# ── Health check ─────────────────────────────────────────
+# Caddy listens on :8080 — probe the root endpoint.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fs http://localhost:8080/ || exit 1
+
+# ── Expose port ──────────────────────────────────────────
+# 8080 = Caddy gateway
+EXPOSE 8080
 
 # ── Bootstrap is the entrypoint ──────────────────────────────
 ENTRYPOINT ["/agent/bootstrap.sh"]

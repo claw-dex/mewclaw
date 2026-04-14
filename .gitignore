@@ -233,3 +233,9 @@ bin/
 uv.lock
 *credentials.json
 cloudflared/config.yml
+
+# Agent runtime bind mounts
+codasst/
+engagius/
+proximate/
+shared/

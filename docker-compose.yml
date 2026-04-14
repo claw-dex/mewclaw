@@ -1,53 +1,90 @@
 # ══════════════════════════════════════════════════════════════
 #  docker-compose.yml — Development mode
 #
-#  Mounts scripts, prompts, and server.py from the host so you
-#  can edit and test without rebuilding the image.
+#  Builds and runs all 3 MewClaw agents on different ports.
 #
 #  Prerequisites:
-#    Run `docker compose build` (OR `docker build -t myagent:seed .`)
+#    docker compose build
 #
 #  Usage:
-#    docker compose up -d            # start
-#    docker compose logs -f          # watch bootstrap
-#    docker exec -it myagent claude  # authenticate
-#    docker compose down             # stop & remove
-#    docker compose down -v          # stop & wipe all state
+#    docker compose up -d              # start all agents
+#    docker compose logs -f codasst   # watch a specific agent
+#    docker exec -it mewclaw-codasst claude  # authenticate
+#    docker compose down               # stop & remove
+#    docker compose down -v            # stop & wipe named volumes
 # ══════════════════════════════════════════════════════════════
 
+x-agent-base: &agent-base
+  deploy:
+    resources:
+      limits:
+        cpus: '2'       # Caps usage at 200% (2 full cores)
+      reservations:
+        cpus: '0.25'    # Guarantees at least 0.25 CPU core
+  restart: unless-stopped
+
 services:
-  agent:
-    image: myagent:seed
-    deploy:
-      resources:
-        limits:
-          cpus: '2'      # Caps usage at 200% (2 full cores)
-        reservations:
-          cpus: '0.25'    # Guarantees at least 0.25 CPU core
+  codasst:
+    <<: *agent-base
+    image: ghcr.io/claw-dex/codasst:v1.0.0
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        AGENT_DNA: ${AGENT_DNA:-v1/base}
-    container_name: myagent
+        AGENT_DNA: v1/codasst
+    container_name: mewclaw-codasst
     ports:
       - "8080:8080"
     volumes:
-      # ── Persist agent state across container recreations ──
-      - agent-memory:/agent/memory
-      - agent-messages:/agent/messages
-      - agent-workspace:/agent/workspace
-
-      # ── Persist Claude credentials across image rebuilds ──
       - agent-claude-home:/home/agent/.claude
       - agent-keepass-home:/home/agent/.keepass
       - agent-config-home:/home/agent/.config
-    restart: unless-stopped
+      - ./shared/workspace:/agent/workspace
+      # ── Per-agent state ──
+      - ./codasst/memory:/agent/memory
+      - ./codasst/messages:/agent/messages
+
+  engagius:
+    <<: *agent-base
+    image: ghcr.io/claw-dex/engagius:v1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_DNA: v1/engagius
+    container_name: mewclaw-engagius
+    ports:
+      - "8180:8080"
+    volumes:
+      - agent-claude-home:/home/agent/.claude
+      - agent-keepass-home:/home/agent/.keepass
+      - agent-config-home:/home/agent/.config
+      - ./shared/workspace:/agent/workspace
+      # ── Per-agent state ──
+      - ./engagius/memory:/agent/memory
+      - ./engagius/messages:/agent/messages
+
+  proximate:
+    <<: *agent-base
+    image: ghcr.io/claw-dex/proximate:v1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_DNA: v1/proximate
+    container_name: mewclaw-proximate
+    ports:
+      - "8280:8080"
+    volumes:
+      - agent-claude-home:/home/agent/.claude
+      - agent-keepass-home:/home/agent/.keepass
+      - agent-config-home:/home/agent/.config
+      - ./shared/workspace:/agent/workspace
+      # ── Per-agent state ──
+      - ./proximate/memory:/agent/memory
+      - ./proximate/messages:/agent/messages
 
 volumes:
-  agent-memory:
-  agent-messages:
-  agent-workspace:
   agent-claude-home:
   agent-keepass-home:
   agent-config-home:

@@ -30,62 +30,113 @@ MewClaw is a lightweight alternative to OpenClaw that runs in containers for sec
 
 ## Quick Start
 
-### 1. Initialize the DNA submodule
+### Available agents
 
-MewClaw uses the [claw-dna](https://github.com/claw-dex/claw-dna) repository as a submodule for its agent initial base state. It act like a DNA for the agent to evolve from. You can customize it or even change to a different DNA by set the `AGENT_DNA` dockerfile argument to a different base directory contain the new DNA.
+| Image | Port | Description |
+|-------|------|-------------|
+| `ghcr.io/claw-dex/codasst:latest` | 8080 | Coding assistant — reviews code, writes features, manages GitHub PRs |
+| `ghcr.io/claw-dex/engagius:latest` | 8180 | Marketing agent — creates content, tracks campaigns, manages outreach |
+| `ghcr.io/claw-dex/proximate:latest` | 8280 | Personal assistant — manages calendar, email, tasks, and daily briefings |
+| `ghcr.io/claw-dex/base:latest` | 8xxx | Generic agent — customizable for various tasks |
 
-```bash
-git submodule update --init --recursive
-```
+### 1. Start an agent
 
-### 2. Build the seed image
-
-```bash
-docker build -t myagent:seed .
-```
-
-### 3. First run — start the container
+Pick the agent you want to run and start it with `docker run`:
 
 ```bash
-docker run -d --name myagent -p 8080:8080 myagent:seed
+# Coding assistant
+docker run -d --name myagent -p 8080:8080 \
+  ghcr.io/claw-dex/codasst:latest
+
+# Marketing agent
+docker run -d --name myagent2 -p 8180:8180 \
+  ghcr.io/claw-dex/engagius:latest
+
+# Personal assistant
+docker run -d --name myagent3 -p 8280:8280 \
+  ghcr.io/claw-dex/proximate:latest
+
+# Generic agent
+docker run -d --name myagent -p 8080:8080 \
+  ghcr.io/claw-dex/base:latest
 ```
 
-The container starts and waits for authentication. Check the logs:
+Check the logs:
 
 ```bash
 docker logs -f myagent
 ```
 
-Alternatively can mount the existing credential file to skip Claude authentication on first run:
+### 2. Authenticate Claude Code
 
-```bash
-docker run -d --name myagent -p 8080:8080 -v ~/.claude/credentials.json:/home/agent/.claude/credentials.json myagent:seed
-```
-
-### 4. Authenticate Claude Code
-
-In a **second terminal**, open the Claude CLI interactively:
+Open the Claude CLI interactively inside the container:
 
 ```bash
 docker exec -it myagent claude
 ```
 
-Complete the authentication flow inside the CLI, then exit (`/exit`).
-The bootstrap detects the auth automatically and finishes setup —
-no restart needed.
+Complete the authentication flow, then exit (`/exit`). The bootstrap detects the auth automatically — no restart needed.
 
-> **Ports:** 8080 (Caddy gateway), 8081 (Streamlit at /app/), 8082 (webhook_receiver — auto-starts each heartbeat).
-> 8083-8090 are available for additional services the agent may create.
+> **Tip:** Ports 8080 / 8180 / 8280 is used for the web portal of the agent. Different ports are used to allow running multiple agents simultaneously without conflicts.
 
-### 5. Open the web portal
+### 3. Open the web portal
 
-Visit **<http://localhost:8080/>** and follow instructions to bootstrap the agent.
+| Agent | URL |
+|-------|-----|
+| codasst | <http://localhost:8080/> |
+| engagius | <http://localhost:8180/> |
+| proximate | <http://localhost:8280/> |
 
-### 6. Start automatic heartbeats
+### 4. Start automatic heartbeats
 
 ```bash
-chmod +x orchestrator.sh
-./orchestrator.sh
+./orchestrator.sh  # use container name "myagent" as default
+./orchestrator.sh --container myagent2  # specify container name if running multiple agents
+```
+
+## Development
+
+For local development — building images from source and running with live bind mounts.
+
+### 1. Initialize submodules
+
+```bash
+git submodule update --init --recursive
+```
+
+### 2. Build and start all agents
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+### 3. Watch logs
+
+```bash
+docker compose logs -f
+# or for a specific agent:
+docker compose logs -f codasst
+```
+
+### 4. Authenticate Claude Code
+
+```bash
+docker exec -it mewclaw-codasst claude
+```
+
+### 5. Rebuild a single agent after changes
+
+```bash
+docker compose build codasst
+docker compose up -d codasst
+```
+
+### Tear down
+
+```bash
+docker compose down       # stop & remove containers
+docker compose down -v    # also wipe named volumes (credentials, config)
 ```
 
 ## Start in background
@@ -210,46 +261,17 @@ mewclaw/
 ├── orchestrator.sh     # Host-side heartbeat loop & snapshot manager
 ├── docker-compose.yml  # Development mode with volume mounts
 ├── README.md
-└── v1/base/            # DNA submodule (from claw-dex/claw-dna)
-    ├── bootstrap.sh    # First-run setup & entrypoint
-    ├── heartbeat.sh    # Single cycle runner (called via docker exec)
-    ├── agent.sh        # Agent execution wrapper
-    ├── Caddyfile       # Caddy gateway configuration (production)
-    ├── Caddyfile.setup # Caddy configuration for first-run setup mode
-    ├── setup.html      # First-run authentication guide page
-    ├── index.html      # Portal redirect page
-    ├── server.py       # Streamlit web portal (managed by bootstrap.sh)
-    ├── constitution.md # Immutable rules (read-only inside container)
-    ├── pyproject.toml  # Python dependencies
-    ├── scripts/        # Utility scripts
-    │   ├── service-manager.py  # Background service lifecycle manager
-    │   ├── scheduler.py        # Scheduled task runner
-    │   ├── notes.py            # Persistent notes store
-    │   ├── reminder.py         # Reminder management
-    │   ├── keepass.py          # Credential store access
-    │   └── ...                 # Other utility scripts
-    ├── services/       # Long-running background services
-    │   ├── webhook_receiver.py # Incoming webhook handler (port 8082, auto-start)
-    │   ├── telegram_bridge.py  # Telegram messaging bridge
-    │   └── whatsapp_bridge.py  # WhatsApp messaging bridge
-    ├── skills/         # Agent skill definitions (SKILL.md files)
-    │   ├── service-manager/    # Background service management
-    │   ├── scheduler/          # Task scheduling
-    │   ├── notes/              # Notes management
-    │   ├── reminder/           # Reminder management
-    │   ├── caddy/              # Caddy gateway configuration
-    │   └── ...                 # Other skills
-    ├── seed/           # Installation scripts
-    └── prompts/
-        ├── bootstrap.md # First cycle: build the web portal
-        ├── self-heal.md # Portal broken: diagnose & fix
-        ├── goal.md      # User assigned a task
-        └── evolve.md    # No task: self-improve
+├── v1/                 # Agent base state (DNA) 
+│   ├── codasst/         # Custom DNA for Coding Assistant agent
+│   ├── engagius/         # Custom DNA for Marketing Agent
+│   └── proximate/         # Another custom DNA for Personal Assistant
+|── scripts/            # Utility scripts (e.g. installer, Cloudflare setup)
+
 ```
 
 ## How Prompt Selection Works
 
-Each heartbeat, the agent runs the following steps (implemented in [v1/base/heartbeat.sh](v1/base/heartbeat.sh)):
+Each heartbeat, the agent runs the following steps (implemented in `heartbeat.sh`):
 
 **Pre-cycle steps (before prompt selection):**
 - **Scheduled tasks** — due tasks from `scheduled_tasks.json` are injected into inbox

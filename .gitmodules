@@ -1,4 +1,12 @@
-[submodule "v1/base"]
-	path = v1/base
+[submodule "v1/codasst"]
+	path = v1/codasst
 	url = git@github.com:claw-dex/claw-dna.git
-	branch = v1/base
+	branch = v1/codasst
+[submodule "v1/engagius"]
+	path = v1/engagius
+	url = git@github.com:claw-dex/claw-dna.git
+	branch = v1/engagius
+[submodule "v1/proximate"]
+	path = v1/proximate
+	url = git@github.com:claw-dex/claw-dna.git
+	branch = v1/proximate
