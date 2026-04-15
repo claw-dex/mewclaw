@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve to root repo regardless of where the script is invoked from
-cd "$(dirname "$0")/.."
-
 # ─── Configurable constants ───────────────────────────────────────────────────
 TUNNEL_NAME="ai-agent-node-local0"
 HOSTNAME="ai-agent-node-local0.0xgosu.dev"
-CLOUDFLARED_DIR="cloudflared"
 CLOUDFLARED_HOME="${HOME}/.cloudflared"
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -113,23 +109,30 @@ fi
 echo ""
 
 # ─── Step 4: Generate config.yml ─────────────────────────────────────────────
-echo "[step 4/6] Generating ${CLOUDFLARED_DIR}/config.yml..."
+echo "[step 4/6] Generating config.yml..."
 
 read -rp "  Hostname [${HOSTNAME}]: " input_hostname
 HOSTNAME="${input_hostname:-${HOSTNAME}}"
 
-CONFIG_SRC="${CLOUDFLARED_DIR}/config.yml.example"
-CONFIG_DST="${CLOUDFLARED_DIR}/config.yml"
-
-if [ ! -f "${CONFIG_SRC}" ]; then
-  echo "  ERROR: Template not found at ${CONFIG_SRC}"
-  exit 1
-fi
+CONFIG_DST="config.yml"
 
 generate_config() {
-  cp "${CONFIG_SRC}" "${CONFIG_DST}"
-  # Use | as sed delimiter and .bak for cross-platform compatibility (GNU + BSD sed)
-  sed -i.bak "s|<TUNNEL_ID>|${TUNNEL_ID}|g; s|<TUNNEL_NAME>|${TUNNEL_NAME}|g; s|<HOSTNAME>|${HOSTNAME}|g; s|/root/.cloudflared|${CLOUDFLARED_HOME}|g" "${CONFIG_DST}" && rm -f "${CONFIG_DST}.bak"
+  cat > "${CONFIG_DST}" <<EOF
+tunnel: ${TUNNEL_ID}
+credentials-file: ${CLOUDFLARED_HOME}/${TUNNEL_ID}.json
+
+ingress:
+  - hostname: ${HOSTNAME}
+    service: http://localhost:8080
+    originRequest:
+      # Timeout for establishing TCP connection to origin (default: 30s)
+      connectTimeout: 10s
+      # Keep-alive timeout for idle connections (important for WebSocket)
+      keepAliveTimeout: 3600s
+
+  # Catch-all rule (required by cloudflared)
+  - service: http_status:404
+EOF
   echo "  Generated ${CONFIG_DST} with tunnel ID ${TUNNEL_ID}."
   echo ""
 }
@@ -187,18 +190,18 @@ echo "[step 6/6] Setup complete!"
 echo ""
 echo "  Tunnel name:      ${TUNNEL_NAME}"
 echo "  Tunnel ID:        ${TUNNEL_ID}"
-echo "  Config file:      ${CLOUDFLARED_DIR}/config.yml"
+echo "  Config file:      config.yml"
 echo "  Credentials file: ${CLOUDFLARED_HOME}/${TUNNEL_ID}.json"
 echo "  Hostname:         ${HOSTNAME}"
 echo ""
 echo "  To start the tunnel manually:"
 echo ""
-echo "    cloudflared tunnel --config ${CLOUDFLARED_DIR}/config.yml run"
+echo "    cloudflared tunnel --config config.yml run"
 echo ""
 echo "  To start the tunnel as a daemon (systemd service):"
 echo ""
 echo "    sudo mkdir -p /etc/cloudflared/"
-echo "    sudo cp ${CLOUDFLARED_DIR}/config.yml /etc/cloudflared/config.yml"
+echo "    sudo cp config.yml /etc/cloudflared/config.yml"
 echo "    sudo cloudflared service install"
 echo "    sudo systemctl start cloudflared"
 echo ""
