@@ -111,6 +111,11 @@ docker run -d --name myagent -p 8080:8080 \
 
 ### 4. Start automatic heartbeats
 
+> **Optional:** If you don't have `orchestrator.sh` locally, download it first:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/claw-dex/mewclaw/main/orchestrator.sh -o orchestrator.sh && chmod +x orchestrator.sh
+> ```
+
 ```bash
 ./orchestrator.sh  # use container name "myagent" as default
 ./orchestrator.sh --container myagent2  # specify container name if running multiple agents
@@ -240,6 +245,21 @@ docker exec myagent bash -c \
 
 > The hostname is stored in `/agent/memory/portal_config.json` and injected into the agent's system prompt each heartbeat.
 
+### 5. Enable basic auth (recommended for public access)
+
+Once the portal is exposed publicly, protect it with basic authentication to prevent unauthenticated access.
+
+**Via the web portal (recommended):** Open the **System** tab → expand **Run Script** → select `portal_config.py` → set subcommand to `auth` → enter `--enable username:password` in the arguments field → click Run.
+
+**Via CLI:**
+
+```bash
+docker exec myagent bash -c \
+  'uv run python scripts/portal_config.py auth --enable myuser:mysecretpassword'
+```
+
+> Credentials are stored in the agent's KeePass database and the auth route is automatically re-applied on each container restart.
+
 ---
 
 ## Rollback
@@ -275,11 +295,11 @@ Open Telegram, message [@BotFather](https://t.me/BotFather), and run `/newbot`. 
 ```bash
 # One-time: initialise the credential database if it doesn't exist yet
 docker exec -it myagent bash -c \
-  'cd /agent && uv run python scripts/keepass.py init'
+  'uv run python scripts/keepass.py init'
 
 # Store the bot token
 docker exec -it myagent bash -c \
-  'cd /agent && uv run python scripts/keepass.py store \
+  'uv run python scripts/keepass.py store \
    --title TELEGRAM_BOT_TOKEN --username bot --password "<your-token>"'
 ```
 
@@ -287,7 +307,7 @@ docker exec -it myagent bash -c \
 
 ```bash
 docker exec -it myagent bash -c \
-  'cd /agent && uv run python scripts/service_manager.py restart telegram_bridge'
+  'uv run python scripts/service_manager.py restart telegram_bridge'
 ```
 
 **4. Send the bot a message on Telegram**
