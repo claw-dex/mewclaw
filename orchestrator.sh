@@ -73,6 +73,9 @@ if [[ -z "$IMAGE_NAME" ]]; then
     unset _raw
 fi
 
+# ── Heartbeat log (used to capture output for rescue on failure) ──
+HB_LOG="/tmp/orchestrator-hb-${CONTAINER}.log"
+
 # ── Manual snapshot (--snapshot flag) ───────────────────────
 if $DO_SNAPSHOT; then
     TAG="manual-$(date +%Y%m%d-%H%M%S)"
@@ -114,15 +117,70 @@ heartbeat() {
     local ts=$(ts_now)
     echo -e "${CYAN}[${ts}]${NC} Heartbeat: waking agent..."
 
-    # Run heartbeat, capture exit code
-    local flags=""
-    $AGENT_SLEEP && flags="--agent-sleep"
-    [ -n "$MAX_CONSECUTIVE_EVOLVE" ] && flags="$flags --max-evolve $MAX_CONSECUTIVE_EVOLVE"
-    if docker exec "$CONTAINER" /agent/heartbeat.sh $flags; then
+    # Run heartbeat, capture output via tee for rescue diagnosis on failure.
+    local -a flags=()
+    $AGENT_SLEEP && flags+=(--agent-sleep)
+    [ -n "$MAX_CONSECUTIVE_EVOLVE" ] && flags+=(--max-evolve "$MAX_CONSECUTIVE_EVOLVE")
+    docker exec "$CONTAINER" /agent/heartbeat.sh "${flags[@]}" 2>&1 | tee "$HB_LOG"
+    local hb_exit=${PIPESTATUS[0]}
+
+    if (( hb_exit == 0 )); then
         echo -e "${GREEN}[$(ts_now)]${NC} Heartbeat: cycle complete."
+        RESCUE_FAILURES=0
     else
-        echo -e "${YELLOW}[$(ts_now)]${NC} Heartbeat: cycle exited with error (agent may self-heal next cycle)."
+        echo -e "${YELLOW}[$(ts_now)]${NC} Heartbeat: cycle failed (exit code: ${hb_exit})."
+        if (( RESCUE_FAILURES >= MAX_RESCUE_FAILURES )); then
+            echo -e "${RED}[$(ts_now)]${NC} Skipping rescue (${RESCUE_FAILURES} consecutive failures). Manual intervention needed."
+        else
+            rescue "$HB_LOG"
+        fi
     fi
+}
+
+RESCUE_AGENT_URL="https://raw.githubusercontent.com/claw-dex/claw-dna/main/agent.sh"
+
+rescue() {
+    local hb_log="$1"
+    local ts=$(ts_now)
+    echo -e "${YELLOW}[${ts}]${NC} Rescue: invoking agent directly to diagnose and fix..."
+
+    # Download a fresh agent.sh from remote into the container (avoids using a possibly broken local copy)
+    echo -e "${DIM}[$(ts_now)] Rescue: downloading agent.sh from remote...${NC}"
+    if ! docker exec "$CONTAINER" bash -c \
+        "curl -fsSL '${RESCUE_AGENT_URL}' -o /tmp/rescue-agent.sh && chmod +x /tmp/rescue-agent.sh"; then
+        echo -e "${RED}[$(ts_now)]${NC} Rescue: failed to download agent.sh into container."
+        RESCUE_FAILURES=$((RESCUE_FAILURES + 1))
+        return 1
+    fi
+
+    # Extract last 50 lines of heartbeat output as error context
+    local error_context
+    error_context=$(tail -50 "$hb_log" 2>/dev/null || echo "(no output captured)")
+
+    local rescue_prompt="The previous heartbeat cycle failed. Below is the tail of the error output.
+Investigate the root cause and fix it so the next heartbeat succeeds.
+
+--- Error output (last 50 lines) ---
+${error_context}"
+
+    # Write rescue prompt to temp file inside container (avoids ARG_MAX)
+    if ! printf '%s' "$rescue_prompt" | docker exec -i "$CONTAINER" bash -c 'cat > /tmp/.rescue-prompt.txt'; then
+        echo -e "${RED}[$(ts_now)]${NC} Rescue: failed to write prompt into container."
+        RESCUE_FAILURES=$((RESCUE_FAILURES + 1))
+        return 1
+    fi
+
+    # Invoke the freshly downloaded agent.sh (handles AI_AGENT_TYPE dispatch + --task-prompt-file stdin redirection)
+    if docker exec -w /agent "$CONTAINER" /tmp/rescue-agent.sh --yolo \
+        --task-prompt-file /tmp/.rescue-prompt.txt --output-format text; then
+        echo -e "${GREEN}[$(ts_now)]${NC} Rescue: agent completed successfully."
+        RESCUE_FAILURES=0
+    else
+        RESCUE_FAILURES=$((RESCUE_FAILURES + 1))
+        echo -e "${RED}[$(ts_now)]${NC} Rescue: agent also failed (${RESCUE_FAILURES}/${MAX_RESCUE_FAILURES}). Manual intervention may be needed."
+    fi
+
+    docker exec "$CONTAINER" rm -f /tmp/.rescue-prompt.txt /tmp/rescue-agent.sh 2>/dev/null || true
 }
 
 snapshot() {
@@ -176,6 +234,8 @@ trap 'echo -e "\n${YELLOW}Orchestrator stopping...${NC}"; RUNNING=false' INT TER
 # after SNAPSHOT_INTERVAL, not immediately.
 LAST_SNAPSHOT_START=$(date +%s)
 CYCLE=0
+RESCUE_FAILURES=0
+MAX_RESCUE_FAILURES=3
 
 echo -e "${DIM}Starting heartbeat loop. Press Ctrl+C to stop.${NC}"
 echo ""
