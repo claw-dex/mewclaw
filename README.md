@@ -172,6 +172,9 @@ docker compose down -v    # also wipe named volumes (credentials, config)
 nohup ./orchestrator.sh > output.log 2>&1 & echo $! > orchestrator.pid
 # with custom arguments:
 nohup ./orchestrator.sh --agent-sleep > output.log 2>&1 & echo $! > orchestrator.pid
+# more examples:
+nohup ./orchestrator.sh --container mewclaw-codasst > codasst.log 2>&1 & echo $! > orchestrator-codasst.pid
+nohup ./orchestrator.sh --container mewclaw-engagius --max-evolve 10 > engagius.log 2>&1 & echo $! > orchestrator-engagius.pid
 ```
 
 To stop:

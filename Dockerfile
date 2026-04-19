@@ -42,6 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tree \
     # Sudo (so agent user can install packages during evolution)
     sudo \
+    # C build tools (required by Rust linker and native extensions)
+    build-essential \
     # Headless Chromium dependencies (for agent-browser)
     libnss3 \
     libatk1.0-0 \

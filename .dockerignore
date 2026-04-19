@@ -29,6 +29,7 @@ scripts/
 cloudflared/
 
 # Agent runtime bind mounts
+*.pid
 codasst/
 engagius/
 proximate/
