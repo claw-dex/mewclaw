@@ -33,6 +33,8 @@ services:
       args:
         AGENT_DNA: v1/codasst
     container_name: mewclaw-codasst
+    environment:
+      CONTAINER_NAME: mewclaw-codasst
     ports:
       - "8080:8080"
     volumes:
@@ -53,6 +55,8 @@ services:
       args:
         AGENT_DNA: v1/engagius
     container_name: mewclaw-engagius
+    environment:
+      CONTAINER_NAME: mewclaw-engagius
     ports:
       - "8180:8080"
     volumes:
@@ -73,6 +77,8 @@ services:
       args:
         AGENT_DNA: v1/proximate
     container_name: mewclaw-proximate
+    environment:
+      CONTAINER_NAME: mewclaw-proximate
     ports:
       - "8280:8080"
     volumes:

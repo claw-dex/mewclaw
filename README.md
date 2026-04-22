@@ -49,11 +49,11 @@ docker run -d --name myagent -p 8080:8080 \
   ghcr.io/claw-dex/codasst:latest
 
 # Marketing agent
-docker run -d --name myagent2 -p 8180:8180 \
+docker run -d --name myagent2 -e CONTAINER_NAME=myagent2 -p 8180:8180 \
   ghcr.io/claw-dex/engagius:latest
 
 # Personal assistant
-docker run -d --name myagent3 -p 8280:8280 \
+docker run -d --name myagent3 -e CONTAINER_NAME=myagent3 -p 8280:8280 \
   ghcr.io/claw-dex/proximate:latest
 
 # Generic agent

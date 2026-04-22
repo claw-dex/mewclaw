@@ -68,7 +68,7 @@ done
 # ── Derive IMAGE_NAME from container if not explicitly set ───
 if [[ -z "$IMAGE_NAME" ]]; then
     _raw=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
-    IMAGE_NAME="${_raw%%:*}"   # strip tag (e.g. "myagent:seed" → "myagent")
+    IMAGE_NAME="${_raw%%:*}"   # strip tag (e.g. "myagent:latest" → "myagent")
     IMAGE_NAME="${IMAGE_NAME:-myagent}"  # fallback if container not found yet
     unset _raw
 fi
@@ -102,9 +102,6 @@ if ! docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null | grep -q "
     echo ""
     echo "  Start it with:"
     echo "    docker start ${CONTAINER}"
-    echo ""
-    echo "  Or first-time setup:"
-    echo "    docker run -it --name ${CONTAINER} -p 8080:8080 ${IMAGE_NAME}:seed"
     exit 1
 fi
 
