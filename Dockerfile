@@ -80,6 +80,16 @@ RUN apt-get update \
 # uv is written in Rust — installs packages in seconds.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# ── Install Rust toolchain (system-wide via rustup) ──────────
+# CARGO_HOME/RUSTUP_HOME under /usr/local so all users share it.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:${PATH}
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path --default-toolchain stable --profile minimal \
+    && chmod -R a+rwX ${RUSTUP_HOME} ${CARGO_HOME} \
+    && rustc --version && cargo --version
+
 # ── Create non-root agent user ────────────────────────────────
 # --dangerously-skip-permissions requires a non-root user.
 # Grant passwordless sudo so the agent can still install packages.
@@ -147,7 +157,6 @@ RUN claude --version
 
 # ── Copy claude-code config ──────────────────────────────────
 COPY --chown=agent:agent claude-code/.claude.json   /home/agent/.claude.json
-COPY --chown=agent:agent claude-code/claude-system-prompt.md /home/agent/claude-system-prompt.md
 
 # ── Override with local changes for development ──────────────
 # These COPY commands override the cloned DNA files with local
@@ -165,6 +174,26 @@ RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scri
     && echo '[]' > /agent/messages/outbox.json \
     && ln -s /agent/skills /agent/.claude/skills \
     && ln -s /agent/AGENTS.md /agent/.claude/CLAUDE.md
+
+# ── Ensure agent has full read/write on its working directories ──
+# COPY overrides above may reset ownership or tighten modes; re-assert
+# so the agent user can freely read and write runtime state.
+RUN sudo chown -R agent:agent \
+        /agent/messages \
+        /agent/memory \
+        /agent/prompts \
+        /agent/workspace \
+        /agent/.claude \
+        /agent/.streamlit \
+        /agent/web \
+    && sudo chmod -R u+rwX,g+rwX \
+        /agent/messages \
+        /agent/memory \
+        /agent/prompts \
+        /agent/workspace \
+        /agent/.claude \
+        /agent/.streamlit \
+        /agent/web
 
 # ── Health check ─────────────────────────────────────────
 # Caddy listens on :8080 — probe the root endpoint.

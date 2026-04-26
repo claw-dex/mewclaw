@@ -10,7 +10,7 @@
 #    ./orchestrator.sh --container <name>  # default: container name="myagent" heartbeat every 15min, snapshot every 8hr
 #    ./orchestrator.sh --interval 300 --snapshot-interval 7200 # heartbeat every 5min, snapshot every 2hr
 #    ./orchestrator.sh --snapshot   # run manual snapshot only then exit
-#    ./orchestrator.sh --agent-sleep # when enabled, skip heartbeat cycles between 00:00 and 08:00 unless the agent's inbox has items.
+#    ./orchestrator.sh --agent-sleep # idle cycles run dream prompt instead of evolve (capped by --max-dream, default 5).
 # ══════════════════════════════════════════════════════════════
 
 set -uo pipefail
@@ -24,8 +24,9 @@ CONTAINER="myagent"
 HEARTBEAT_INTERVAL=900      # seconds (15 minutes)
 SNAPSHOT_INTERVAL=28800     # seconds (8 hours)
 IMAGE_NAME=""               # derived from container image after arg parsing if not set via --image
-AGENT_SLEEP=false           # sleep mode (skip cycles 00:00–08:00 unless inbox has items)
+AGENT_SLEEP=false           # sleep mode (idle cycles run dream prompt instead of evolve)
 MAX_CONSECUTIVE_EVOLVE=""   # max consecutive evolve cycles before skipping (default: heartbeat.sh default)
+MAX_CONSECUTIVE_DREAM=""    # max consecutive dream cycles before skipping (default: heartbeat.sh default)
 DO_SNAPSHOT=false           # set by --snapshot flag; executed after IMAGE_NAME is resolved
 
 # ── Colors ───────────────────────────────────────────────────
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
         --image)          IMAGE_NAME="$2"; shift 2 ;;
         --agent-sleep)    AGENT_SLEEP=true; shift ;;
         --max-evolve)     MAX_CONSECUTIVE_EVOLVE="$2"; shift 2 ;;
+        --max-dream)      MAX_CONSECUTIVE_DREAM="$2"; shift 2 ;;
         --snapshot)   DO_SNAPSHOT=true; shift ;;
         --help|-h)
             echo "Usage: ./orchestrator.sh [options]"
@@ -55,8 +57,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --snapshot-interval N Snapshot interval in seconds (default: 28800)"
             echo "  --container NAME      Container name (default: myagent)"
             echo "  --image NAME          Image name for snapshots (default: derived from container image)"
-            echo "  --agent-sleep         Enable sleep mode (skip cycles 00:00–08:00 unless inbox has items)"
+            echo "  --agent-sleep         Enable sleep mode (idle cycles run dream prompt instead of evolve)"
             echo "  --max-evolve N        Max consecutive evolve cycles before skipping (default: 5)"
+            echo "  --max-dream N         Max consecutive dream cycles before skipping (default: 5)"
             echo "  --snapshot            Take a manual snapshot and exit"
             echo "  --help                Show this help"
             exit 0
@@ -92,8 +95,9 @@ echo -e "  Container:          ${BOLD}${CONTAINER}${NC}"
 echo -e "  Image name:         ${BOLD}${IMAGE_NAME}${NC}"
 echo -e "  Heartbeat interval: ${BOLD}${HEARTBEAT_INTERVAL}s${NC} ($(( HEARTBEAT_INTERVAL / 60 ))min)"
 echo -e "  Snapshot interval:  ${BOLD}${SNAPSHOT_INTERVAL}s${NC} ($(( SNAPSHOT_INTERVAL / 3600 ))hr)"
-echo -e "  Sleep mode:         ${BOLD}$( $AGENT_SLEEP && echo "ON (00:00–08:00)" || echo "OFF" )${NC}"
+echo -e "  Sleep mode:         ${BOLD}$( $AGENT_SLEEP && echo "ON (idle → dream)" || echo "OFF" )${NC}"
 echo -e "  Max evolve cycles:  ${BOLD}${MAX_CONSECUTIVE_EVOLVE:-5 (default)}${NC}"
+$AGENT_SLEEP && echo -e "  Max dream cycles:   ${BOLD}${MAX_CONSECUTIVE_DREAM:-5 (default)}${NC}"
 echo ""
 
 # Check container is running
@@ -118,6 +122,7 @@ heartbeat() {
     local -a flags=()
     $AGENT_SLEEP && flags+=(--agent-sleep)
     [ -n "$MAX_CONSECUTIVE_EVOLVE" ] && flags+=(--max-evolve "$MAX_CONSECUTIVE_EVOLVE")
+    [ -n "$MAX_CONSECUTIVE_DREAM" ] && flags+=(--max-dream "$MAX_CONSECUTIVE_DREAM")
     docker exec "$CONTAINER" /agent/heartbeat.sh "${flags[@]}" 2>&1 | tee "$HB_LOG"
     local hb_exit=${PIPESTATUS[0]}
 

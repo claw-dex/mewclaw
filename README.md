@@ -174,7 +174,8 @@ nohup ./orchestrator.sh > output.log 2>&1 & echo $! > orchestrator.pid
 nohup ./orchestrator.sh --agent-sleep > output.log 2>&1 & echo $! > orchestrator.pid
 # more examples:
 nohup ./orchestrator.sh --container mewclaw-codasst > codasst.log 2>&1 & echo $! > orchestrator-codasst.pid
-nohup ./orchestrator.sh --container mewclaw-engagius --max-evolve 10 > engagius.log 2>&1 & echo $! > orchestrator-engagius.pid
+nohup ./orchestrator.sh --container mewclaw-engagius --agent-sleep > engagius.log 2>&1 & echo $! > orchestrator-engagius.pid
+nohup ./orchestrator.sh --container mewclaw-proximate --max-evolve 10 > proximate.log 2>&1 & echo $! > orchestrator-proximate.pid
 ```
 
 To stop:
@@ -190,7 +191,9 @@ kill $(cat orchestrator.pid)
 ./orchestrator.sh --interval 60            # heartbeat every 60 seconds
 ./orchestrator.sh --snapshot-interval 7200 # snapshot every 2 hours
 ./orchestrator.sh --snapshot               # manual snapshot now
-./orchestrator.sh --agent-sleep            # enable sleep mode (skips cycles between 00-08 unless inbox has pending items)
+./orchestrator.sh --agent-sleep            # enable sleep mode (idle cycles run dream prompt instead of evolve between 00:00–08:00 user-local)
+./orchestrator.sh --max-evolve 10          # cap consecutive evolve cycles before skipping (default: 5)
+./orchestrator.sh --agent-sleep --max-dream 3  # cap consecutive dream cycles before skipping (default: 5)
 ```
 
 ## Cloudflare Tunnel (External Access)
@@ -352,4 +355,4 @@ Each heartbeat, the agent runs the following steps (implemented in `heartbeat.sh
 5. **Last N consecutive cycles were all evolve** → skip cycle (prevents evolve loop)
 6. **Everything healthy, no tasks** → `evolve.md` (self-improve)
 
-The agent also supports **sleep mode** (via `--agent-sleep` flag) which skips cycles during 00:00–08:00 user timezone unless inbox has pending items.
+The agent also supports **sleep mode** (via `--agent-sleep` flag): between 20:00–08:00 in the user's timezone, the idle prompt becomes `dream.md` (nightly reflection/consolidation) instead of `evolve.md`. Outside that window, idle cycles still use `evolve.md` even with `--agent-sleep` set. The consecutive-idle cap is `--max-evolve` (default 5) for evolve and `--max-dream` (default 5) for dream.
