@@ -42,6 +42,7 @@ services:
       - agent-keepass-home:/home/agent/.keepass
       - agent-config-home:/home/agent/.config
       - ./shared/workspace:/agent/workspace
+      - ./shared/web:/agent/web
       # ── Per-agent state ──
       - ./codasst/memory:/agent/memory
       - ./codasst/messages:/agent/messages
@@ -64,6 +65,7 @@ services:
       - agent-keepass-home:/home/agent/.keepass
       - agent-config-home:/home/agent/.config
       - ./shared/workspace:/agent/workspace
+      - ./shared/web:/agent/web
       # ── Per-agent state ──
       - ./engagius/memory:/agent/memory
       - ./engagius/messages:/agent/messages
@@ -86,6 +88,7 @@ services:
       - agent-keepass-home:/home/agent/.keepass
       - agent-config-home:/home/agent/.config
       - ./shared/workspace:/agent/workspace
+      - ./shared/web:/agent/web
       # ── Per-agent state ──
       - ./proximate/memory:/agent/memory
       - ./proximate/messages:/agent/messages

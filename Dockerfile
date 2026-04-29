@@ -197,8 +197,10 @@ RUN sudo chown -R agent:agent \
 
 # ── Health check ─────────────────────────────────────────
 # Caddy listens on :8080 — probe the root endpoint.
+# Accept 401 as healthy so the check still passes when portal basic auth is enabled.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -fs http://localhost:8080/ || exit 1
+    CMD curl -fsS -o /dev/null -w '%{http_code}' http://localhost:8080/ \
+        | grep -qE '^(200|401)$' || exit 1
 
 # ── Expose port ──────────────────────────────────────────
 # 8080 = Caddy gateway
