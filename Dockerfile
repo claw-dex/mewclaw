@@ -15,6 +15,9 @@ ARG AGENT_DNA
 # ── Avoid interactive prompts during build ───────────────────
 ARG DEBIAN_FRONTEND=noninteractive
 
+# ── Runtime environment ──────────────────────────────────────
+ENV TMPDIR=/tmp
+
 # ── System packages ──────────────────────────────────────────
 # Core utilities the agent needs from birth.
 # The agent can install more packages as it evolves — they'll
@@ -40,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     less \
     tree \
+    ripgrep \
     # Sudo (so agent user can install packages during evolution)
     sudo \
     # C build tools (required by Rust linker and native extensions)
