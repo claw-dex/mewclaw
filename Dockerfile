@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gawk \
     # File utilities
     unzip \
+    zip \
     less \
     tree \
     ripgrep \
@@ -168,8 +169,10 @@ COPY --chown=agent:agent claude-code/.claude.json   /home/agent/.claude.json
 COPY --chown=agent:agent Dockerfile      /agent/Dockerfile
 COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
 
-# ── Generate seed .md memory files from JSON data ─────────────
-RUN cd /agent && uv run python scripts/memory_sync.py
+# ── Seed agent dirs from seed/ then generate .md memory files ──
+RUN cp -r /agent/seed/memory/. /agent/memory/ \
+    && cp -r /agent/seed/web/.    /agent/web/ \
+    && cd /agent && uv run python scripts/memory_sync.py
 
 # ── Set permissions, init message queues, link files ────────────
 RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scripts/*.sh \
