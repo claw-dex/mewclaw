@@ -81,7 +81,7 @@ HB_LOG="/tmp/orchestrator-hb-${CONTAINER}.log"
 
 # ── Manual snapshot (--snapshot flag) ───────────────────────
 if $DO_SNAPSHOT; then
-    TAG="manual-$(date +%Y%m%d-%H%M%S)"
+    TAG="${CONTAINER}-manual-$(date +%Y%m%d-%H%M%S)"
     echo -e "${CYAN}Creating snapshot: ${IMAGE_NAME}:${TAG}${NC}"
     docker commit "$CONTAINER" "${IMAGE_NAME}:${TAG}"
     echo -e "${GREEN}✔ Snapshot saved: ${IMAGE_NAME}:${TAG}${NC}"
@@ -186,7 +186,7 @@ ${error_context}"
 }
 
 snapshot() {
-    local tag="${1:-auto-$(date +%Y%m%d-%H%M%S)}"
+    local tag="${1:-${CONTAINER}-auto-$(date +%Y%m%d-%H%M%S)}"
     local ts=$(ts_now)
 
     echo -e "${CYAN}[${ts}]${NC} Snapshot: creating ${IMAGE_NAME}:${tag}..."
@@ -220,7 +220,7 @@ except Exception:
             echo -e "${DIM}[$(ts_now)] Cleanup: removing old snapshot ${IMAGE_NAME}:${tag}${NC}"
             docker rmi "${IMAGE_NAME}:${tag}" >/dev/null 2>&1 && cleaned=$((cleaned + 1)) || true
         fi
-    done < <(docker images "${IMAGE_NAME}" --format "{{.Tag}}" 2>/dev/null | grep "^auto-")
+    done < <(docker images "${IMAGE_NAME}" --format "{{.Tag}}" 2>/dev/null | grep "^${CONTAINER}-auto-")
 
     if [ "$cleaned" -gt 0 ]; then
         echo -e "${GREEN}[$(ts_now)] Cleanup: removed ${cleaned} old snapshot(s) (>48h)${NC}"

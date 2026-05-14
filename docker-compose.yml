@@ -32,6 +32,7 @@ services:
       dockerfile: Dockerfile
       args:
         AGENT_DNA: v1/codasst
+        CACHEBUST: ${CACHEBUST:-1}
     container_name: mewclaw-codasst
     environment:
       CONTAINER_NAME: mewclaw-codasst
@@ -55,6 +56,7 @@ services:
       dockerfile: Dockerfile
       args:
         AGENT_DNA: v1/engagius
+        CACHEBUST: ${CACHEBUST:-1}
     container_name: mewclaw-engagius
     environment:
       CONTAINER_NAME: mewclaw-engagius
@@ -78,6 +80,7 @@ services:
       dockerfile: Dockerfile
       args:
         AGENT_DNA: v1/proximate
+        CACHEBUST: ${CACHEBUST:-1}
     container_name: mewclaw-proximate
     environment:
       CONTAINER_NAME: mewclaw-proximate

@@ -95,6 +95,17 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     && chmod -R a+rwX ${RUSTUP_HOME} ${CARGO_HOME} \
     && rustc --version && cargo --version
 
+
+# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
+# All bundled in a single seed script for cleaner caching.
+# Use root user to install system-wide avoid sudo in the script and potential permission issues.
+COPY --chown=agent:agent ${AGENT_DNA}/seed/ /tmp/seed/
+RUN chmod +x /tmp/seed/*.sh && /tmp/seed/install.sh \
+    && rm -rf /tmp/seed \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm cache clean --force 2>/dev/null
+ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
+
 # ── Create non-root agent user ────────────────────────────────
 # --dangerously-skip-permissions requires a non-root user.
 # Grant passwordless sudo so the agent can still install packages.
@@ -112,9 +123,10 @@ USER agent
 # Clone the agent DNA from the source repository, then later COPY
 # commands will override files with local uncommitted changes for
 # development and testing.
+ARG CACHEBUST=1
 RUN git config --global user.email "bot@0xgosu.dev" \
     && git config --global user.name "MewClaw-Agent" \
-    && git clone --branch ${AGENT_DNA} --single-branch --depth=1 \
+    && git clone --branch ${AGENT_DNA} --single-branch \
        https://github.com/claw-dex/claw-dna.git /agent
 
 WORKDIR /agent
@@ -133,15 +145,6 @@ RUN mkdir -p \
     /home/agent/.keepass \
     /home/agent/.ssh \
     && chmod 700 /home/agent/.ssh
-
-# ── Install agent-browser, Google Cloud CLI, Google Workspace CLI ──
-# All bundled in a single seed script for cleaner caching.
-# agent user has passwordless sudo for system-level installs.
-COPY --chown=agent:agent ${AGENT_DNA}/seed/ /agent/seed/
-RUN chmod +x /agent/seed/*.sh && sudo /agent/seed/install.sh \
-    && sudo rm -rf /var/lib/apt/lists/* \
-    && sudo npm cache clean --force 2>/dev/null
-ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
 # ── Copy pyproject.toml & sync dependencies ──────────────────
 COPY --chown=agent:agent ${AGENT_DNA}/pyproject.toml /agent/pyproject.toml

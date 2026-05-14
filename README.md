@@ -95,7 +95,7 @@ If you are already authenticated on the host, mount the credential file so the c
 
 ```bash
 docker run -d --name myagent -p 8080:8080 \
-  -v ~/.claude/.credentials.json:/home/agent/.claude/.credentials.json:ro \
+  -v ~/.claude/.credentials.json:/home/agent/.claude/.credentials.json \
   ghcr.io/claw-dex/codasst:latest
 ```
 
@@ -134,16 +134,16 @@ git submodule update --init --recursive
 ### 2. Build and start all agents
 
 ```bash
-docker compose build
-docker compose up -d
+make build
+make up
 ```
 
 ### 3. Watch logs
 
 ```bash
-docker compose logs -f
+make logs
 # or for a specific agent:
-docker compose logs -f codasst
+make logs SERVICE=codasst
 ```
 
 ### 4. Authenticate Claude Code
@@ -155,14 +155,14 @@ docker exec -it mewclaw-codasst claude
 ### 5. Rebuild a single agent after changes
 
 ```bash
-docker compose build codasst
-docker compose up -d codasst
+make build SERVICE=codasst
+make up SERVICE=codasst
 ```
 
 ### Tear down
 
 ```bash
-docker compose down       # stop & remove containers
+make down                 # stop & remove containers
 docker compose down -v    # also wipe named volumes (credentials, config)
 ```
 
@@ -281,6 +281,40 @@ docker stop myagent
 docker rm myagent
 docker run -d --name myagent -p 8080:8080 myagent:<tag-to-restore>
 ```
+
+## Migrate to Another Container/Host
+
+Move a running agent (memory, messages, workspace, credentials, skills, scripts, etc.) to a new container or host using the `full-backup-and-migrate` skill.
+
+### 1. On the source agent — create the backup
+
+In the source agent's chat, invoke:
+
+```
+/full-backup-and-migrate create a full backup file for migration
+```
+
+The agent runs `scripts/full_backup.sh` and produces a single zip at `/agent/backup/agent_full_backup_<TIMESTAMP>.zip`. The agent will then make it downloadable (e.g. by copying it into the Workspace file browser).
+
+### 2. On the target — restore
+
+Pick whichever path matches your situation.
+
+**A. Fresh container — use the first-run bootstrap form (simplest)**
+
+Start a new agent container on the target host (see [Quick Start](#quick-start)) and open its portal. The first-run screen has a **Migrate from existing agent backup** uploader (chunked, 16 MB) — drop the zip there, leave the goal field empty (or type a post-migration instruction), and submit. The first bootstrap cycle detects the upload via `/agent/memory/portal_config.json` and runs the full Recovery automatically. Nothing else to do.
+
+**B. Existing target agent — invoke the skill**
+
+If the target already finished bootstrap, upload the zip via the **Workspace** tab → **Upload files** (use the chunked uploader for files ≥ 50 MB), then in the target agent's chat invoke:
+
+```
+/full-backup-and-migrate
+```
+
+It picks the zip up from `/agent/workspace/` or `/agent/backup/` and runs Recovery: stop services → unzip → restore `memory`/`messages`/`workspace`/`web`/`/home/agent` → selectively merge code dirs (`app`, `prompts`, `scripts`, `skills`, `services`) → restart services → rebuild the semantic memory index.
+
+---
 
 ## Communicating with the Agent
 

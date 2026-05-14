@@ -87,5 +87,6 @@ jobs:
           labels: ${{ github.event_name == 'workflow_dispatch' && steps.meta_dispatch.outputs.labels || steps.meta.outputs.labels }}
           build-args: |
             AGENT_DNA=${{ matrix.agent_dna }}
+            CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha,scope=${{ matrix.agent }}
           cache-to: type=gha,mode=max,scope=${{ matrix.agent }}
