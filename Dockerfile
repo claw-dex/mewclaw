@@ -174,8 +174,7 @@ COPY --chown=agent:agent ${AGENT_DNA}/            /agent/
 
 # ── Seed agent dirs from seed/ then generate .md memory files ──
 RUN cp -r /agent/seed/memory/. /agent/memory/ \
-    && cp -r /agent/seed/web/.    /agent/web/ \
-    && cd /agent && uv run python scripts/memory_sync.py
+    && cp -r /agent/seed/web/.    /agent/web/
 
 # ── Set permissions, init message queues, link files ────────────
 RUN chmod +x /agent/bootstrap.sh /agent/heartbeat.sh /agent/agent.sh /agent/scripts/*.sh \
