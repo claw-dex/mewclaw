@@ -79,17 +79,7 @@ docker exec -it myagent claude
 
 Complete the authentication flow, then exit (`/exit`). The bootstrap detects the auth automatically — no restart needed.
 
-**Option B — OAuth token via environment variable**
-
-Pass a Claude OAuth token at startup to skip the interactive flow entirely:
-
-```bash
-docker run -d --name myagent -p 8080:8080 \
-  -e CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-xxxxxx \
-  ghcr.io/claw-dex/codasst:latest
-```
-
-**Option C — Mount local credentials (reuse host auth)**
+**Option B — Mount local credentials (reuse host auth)**
 
 If you are already authenticated on the host, mount the credential file so the container reuses it without any additional login:
 
@@ -98,6 +88,8 @@ docker run -d --name myagent -p 8080:8080 \
   -v ~/.claude/.credentials.json:/home/agent/.claude/.credentials.json \
   ghcr.io/claw-dex/codasst:latest
 ```
+
+> **Not recommended:** Don't pass `CLAUDE_CODE_OAUTH_TOKEN` as a container environment variable. It is fixed when the container is created, so when the token expires or you want to switch to a different Claude account, you have to recreate the container. Use Option A or B instead — you can re-login anytime with `docker exec -it myagent claude`.
 
 > **Tip:** Ports 8080 / 8180 / 8280 is used for the web portal of the agent. Different ports are used to allow running multiple agents simultaneously without conflicts.
 
